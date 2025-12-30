@@ -584,3 +584,53 @@ export async function processFullResponseActions(
     }
   }
 }
+
+
+// DESIGN SEMANTIC FILE PROCESSOR
+/**
+ * Processes model output intended ONLY for DESIGN_SEMANTIC.md.
+ *
+ * Contract:
+ * - Model output MUST contain exactly one <dyad-write> tag
+ * - The write path MUST be DESIGN_SEMANTIC.md
+ * - All other tags or paths are ignored
+ * - No DB, no git, no UI side effects
+ */
+export async function processDesignSemanticResponse({
+  fullResponse,
+  appPath,
+}: {
+  fullResponse: string;
+  appPath: string;
+}) {
+  if (!fullResponse) return;
+
+  // Parse dyad-write tags
+  const writeTags = getDyadWriteTags(fullResponse);
+
+  // HARD GUARD 1: exactly one write
+  if (writeTags.length !== 1) {
+    return;
+  }
+
+  const write = writeTags[0];
+
+  // Normalize allowed path
+  const allowedPath = "DESIGN_SEMANTIC.md";
+
+  // HARD GUARD 2: exact file match
+  if (write.path !== allowedPath) {
+    return;
+  }
+
+  // Resolve absolute path safely
+  const absolutePath = safeJoin(appPath, allowedPath);
+
+  // Ensure parent directory exists
+  fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
+
+  // Write file (overwrite semantics is intended)
+  fs.writeFileSync(absolutePath, write.content, "utf8");
+}
+// DESIGN SEMANTIC FILE PROCESSOR END
+

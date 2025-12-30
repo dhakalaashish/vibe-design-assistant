@@ -1,3 +1,4 @@
+import { app } from "electron"
 import { v4 as uuidv4 } from "uuid";
 import { ipcMain, IpcMainInvokeEvent } from "electron";
 import {
@@ -9,10 +10,11 @@ import {
   TextStreamPart,
   stepCountIs,
   hasToolCall,
+  generateText
 } from "ai";
 
 import { db } from "../../db";
-import { chats, messages } from "../../db/schema";
+import { chats, messages, apps } from "../../db/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import type { SmartContextMode } from "../../lib/schemas";
 import {
@@ -34,6 +36,7 @@ import {
 import {
   dryRunSearchReplace,
   processFullResponseActions,
+  processDesignSemanticResponse
 } from "../processors/response_processor";
 import { streamTestResponse } from "./testing_chat_handlers";
 import { getTestResponse } from "./testing_chat_handlers";
@@ -87,6 +90,9 @@ import {
   processChatMessagesWithVersionedFiles as getVersionedFiles,
   VersionedFiles as VersionedFiles,
 } from "../utils/versioned_codebase_context";
+import { electron } from "node:process";
+import { design_prompt } from "@/prompts/design_prompt";
+
 
 type AsyncIterableStream<T> = AsyncIterable<T> & ReadableStream<T>;
 
@@ -241,6 +247,56 @@ export function registerChatStreamHandlers() {
       if (!chat) {
         throw new Error(`Chat not found: ${req.chatId}`);
       }
+
+      // DESIGN TODO INIT LOGIC START
+      // 1. Fetch the entire app history (all chats and all messages)
+      const appWithFullHistory = await db.query.apps.findFirst({
+        where: eq(apps.id, chat.appId),
+        with: {
+          chats: {
+            with: {
+              messages: {
+                orderBy: (messages, { asc }) => [asc(messages.createdAt)],
+              },
+            },
+          },
+        },
+      });
+
+      if (!appWithFullHistory) {
+        throw new Error(`Full app history not found for appId: ${chat.appId}`);
+      }
+
+      // 2. Flatten all messages into a single chronological timeline for the LLM context
+      const allProjectMessages = appWithFullHistory.chats
+        .flatMap((c) => c.messages)
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+      // Count the number of user messages across the ENTIRE project history
+      const numPastUserMessages = allProjectMessages.filter(
+        (m) => m.role === "user",
+      ).length;
+
+      const designSemanticPath = path.join(
+        getDyadAppPath(appWithFullHistory.path),
+        "DESIGN_SEMANTIC.md",
+      );
+
+      let designSemanticExists = false;
+      let designSemanticFileContent = "";
+      try {
+        const stat = await fs.promises.stat(designSemanticPath);
+        if (stat.isFile()) {
+          const designSemanticFileContent = await fs.promises.readFile(designSemanticPath, "utf8");
+          // Ensure the file is not just present, but actually contains data
+          designSemanticExists = designSemanticFileContent.trim().length > 0;
+        }
+      } catch {
+        // If the file doesn't exist or is inaccessible, we treat it as non-existent
+        designSemanticExists = false;
+        designSemanticFileContent = "";
+      }
+      // DESIGN TODO INIT LOGIC END
 
       // Handle redo option: remove the most recent messages if needed
       if (req.redo) {
@@ -621,6 +677,15 @@ ${componentSnippet}
           systemPrompt += `\n\n# Referenced Apps\nThe user has mentioned the following apps in their prompt: ${mentionedAppsList}. Their codebases have been included in the context for your reference. When referring to these apps, you can understand their structure and code to provide better assistance, however you should NOT edit the files in these referenced apps. The referenced apps are NOT part of the current app and are READ-ONLY.`;
         }
 
+        // DESIGN TODO DONE: check if design is required, and if yes, create the appropriate prompt for design
+        const isChatModeBuild = settings.selectedChatMode === "build"
+        const hasImproveDyadTags = req.prompt.includes("<dyad-improve-prompt>")
+        const shouldImprovePrompt = !hasImproveDyadTags && isChatModeBuild // If the prompt does not include <dyad-improve-prompt and we are building
+        // if isChatModeBuild, and designSemanticExists, and shouldImprovePrompt, then we can replace the system prompt with the design prompt.
+        // Use designSemanticFileContent on this
+        systemPrompt = design_prompt(designSemanticExists, true, designSemanticFileContent)
+        // DESIGN TODO DONE END
+
         const isSecurityReviewIntent =
           req.prompt.startsWith("/security-review");
         if (isSecurityReviewIntent) {
@@ -642,26 +707,32 @@ ${componentSnippet}
             logger.info("Failed to read security rules", error);
           }
         }
+        
 
-        if (
-          updatedChat.app?.supabaseProjectId &&
-          settings.supabase?.accessToken?.value
-        ) {
-          systemPrompt +=
-            "\n\n" +
-            SUPABASE_AVAILABLE_SYSTEM_PROMPT +
-            "\n\n" +
-            (await getSupabaseContext({
-              supabaseProjectId: updatedChat.app.supabaseProjectId,
-            }));
-        } else if (
-          // Neon projects don't need Supabase.
-          !updatedChat.app?.neonProjectId &&
-          // If in security review mode, we don't need to mention supabase is available.
-          !isSecurityReviewIntent
-        ) {
-          systemPrompt += "\n\n" + SUPABASE_NOT_AVAILABLE_SYSTEM_PROMPT;
+        // DESIGN TODO DONE: Ensure that hese supabase prompts is NOT added to the design prompts
+        if (!shouldImprovePrompt){
+          if (
+            updatedChat.app?.supabaseProjectId &&
+            settings.supabase?.accessToken?.value
+          ) {
+            systemPrompt +=
+              "\n\n" +
+              SUPABASE_AVAILABLE_SYSTEM_PROMPT +
+              "\n\n" +
+              (await getSupabaseContext({
+                supabaseProjectId: updatedChat.app.supabaseProjectId,
+              }));
+          } else if (
+            // Neon projects don't need Supabase.
+            !updatedChat.app?.neonProjectId &&
+            // If in security review mode, we don't need to mention supabase is available.
+            !isSecurityReviewIntent
+          ) {
+            systemPrompt += "\n\n" + SUPABASE_NOT_AVAILABLE_SYSTEM_PROMPT;
+          }
         }
+        // DESIGN TODO DONE END
+
         const isSummarizeIntent = req.prompt.startsWith(
           "Summarize from chat-id=",
         );
@@ -743,7 +814,9 @@ This conversation includes one or more image attachments. When the user uploads 
                 },
               ] as const)
             : [];
-
+        
+        // POTENTIAL BUG: Incase the <dyad-improved-prompt> is not removed from the user prompt (since if it exists, then we do not do design improvement)
+        // It might give some errors, as model might not understand what to do
         const limitedHistoryChatMessages = limitedMessageHistory.map((msg) => ({
           role: msg.role as "user" | "assistant" | "system",
           // Why remove thinking tags?
@@ -760,6 +833,58 @@ This conversation includes one or more image attachments. When the user uploads 
             },
           },
         }));
+
+        // DESIGN TODO: Update the limitedHistoryChatMessages, to be relevant to design prompt improvement. 
+        // In chatMessages, we can actually keep the codebase, and otherCodebasePrefix, as that will ensure that the updated prompt is better.
+        // As all messages might make the model hallucinate, so old messages must be filtered
+        // Then, we can only keep the user prompt, and the choices of improved prompt only, this way the past messages becomes just a design improvement only.
+        // This ensures that the model does not hallucinate on what it wants to do!
+        // On the current user message, prepend this: "Help me give variations of improved prompts for this user prompt: "
+        // Moreover, since the limitedHistoryChatMessages only removes dyad tags for the "ask" and not for "build", so we should be okay right?
+
+        if (shouldImprovePrompt){
+          const designLimitedHistoryChatMessages = limitedMessageHistory.map((msg) => ({
+            role: msg.role as "user" | "assistant" | "system",
+            content: removeNonEssentialTags(msg.content),
+            providerOptions: {
+              "dyad-engine": {
+                sourceCommitHash: msg.sourceCommitHash,
+                commitHash: msg.commitHash,
+              },
+            },
+          }));
+          const designOnlyMessageHistory: ModelMessage[] = [];
+          // Only select the design improvement messages 
+          for (let i = 1; i < designLimitedHistoryChatMessages.length; i++) {
+            const prev = designLimitedHistoryChatMessages[i - 1];
+            const curr = designLimitedHistoryChatMessages[i];
+
+            if (
+              curr.role === "assistant" &&
+              curr.content.includes("<dyad-improved-prompt>")
+            ) {
+              if (prev.role === "user") {
+                designOnlyMessageHistory.push(prev);
+              }
+              designOnlyMessageHistory.push(curr);
+            }
+          }
+          // Rewrite the last user message
+          const lastMsg =
+            designLimitedHistoryChatMessages[
+              designLimitedHistoryChatMessages.length - 1
+            ];
+
+          if (lastMsg?.role === "user") {
+            designOnlyMessageHistory.push({
+              ...lastMsg,
+              content:
+                "Improve the prompt based on design knowledge:\n" +
+                lastMsg.content,
+            });
+          }
+        }
+        // DESIGN TODO END
 
         let chatMessages: ModelMessage[] = [
           ...codebasePrefix,
@@ -781,6 +906,11 @@ This conversation includes one or more image attachments. When the user uploads 
           }
         }
 
+        
+
+
+
+
         if (isSummarizeIntent) {
           const previousChat = await db.query.chats.findFirst({
             where: eq(chats.id, parseInt(req.prompt.split("=")[1])),
@@ -799,6 +929,7 @@ This conversation includes one or more image attachments. When the user uploads 
             } satisfies ModelMessage,
           ];
         }
+
         const simpleStreamText = async ({
           chatMessages,
           modelClient,
@@ -886,6 +1017,14 @@ This conversation includes one or more image attachments. When the user uploads 
             } satisfies GoogleGenerativeAIProviderOptions;
           }
 
+          saveFullPromptDebug({
+            systemPrompt: systemPromptOverride,
+            messages: chatMessages.filter((m) => m.content),
+            providerOptions,
+            modelName: settings.selectedModel.name,
+            chatId: req.chatId,
+          });
+
           const streamResult = streamText({
             headers: isAnthropic
               ? {
@@ -957,7 +1096,170 @@ This conversation includes one or more image attachments. When the user uploads 
           };
         };
 
+        // DESIGN TODO: Create a generate text instead of stream text function for the backend processing of the design semantic file
+        const simpleGenerateText = async ({
+          chatMessages,
+          modelClient,
+          tools,
+          systemPromptOverride = systemPrompt,
+          dyadDisableFiles = false,
+          files,
+        }: {
+          chatMessages: ModelMessage[];
+          modelClient: ModelClient;
+          files: CodebaseFile[];
+          tools?: ToolSet;
+          systemPromptOverride?: string;
+          dyadDisableFiles?: boolean;
+        }) => {
+          if (isEngineEnabled) {
+            logger.log(
+              "sending AI request to engine with request id:",
+              dyadRequestId,
+            );
+          } else {
+            logger.log("sending AI request");
+          }
+          let versionedFiles: VersionedFiles | undefined;
+          if (isDeepContextEnabled) {
+            versionedFiles = await getVersionedFiles({
+              files,
+              chatMessages,
+              appPath,
+            });
+          }
+          const smartContextMode: SmartContextMode = isDeepContextEnabled
+            ? "deep"
+            : "balanced";
+          // Build provider options with correct Google/Vertex thinking config gating
+          const providerOptions: Record<string, any> = {
+            "dyad-engine": {
+              dyadAppId: updatedChat.app.id,
+              dyadRequestId,
+              dyadDisableFiles,
+              dyadSmartContextMode: smartContextMode,
+              dyadFiles: versionedFiles ? undefined : files,
+              dyadVersionedFiles: versionedFiles,
+              dyadMentionedApps: mentionedAppsCodebases.map(
+                ({ files, appName }) => ({
+                  appName,
+                  files,
+                }),
+              ),
+            },
+            "dyad-gateway": getExtraProviderOptions(
+              modelClient.builtinProviderId,
+              settings,
+            ),
+            openai: {
+              reasoningSummary: "auto",
+            } satisfies OpenAIResponsesProviderOptions,
+          };
+
+          // Conditionally include Google thinking config only for supported models
+          const selectedModelName = settings.selectedModel.name || "";
+          const providerId = modelClient.builtinProviderId;
+          const isVertex = providerId === "vertex";
+          const isGoogle = providerId === "google";
+          const isAnthropic = providerId === "anthropic";
+          const isPartnerModel = selectedModelName.includes("/");
+          const isGeminiModel = selectedModelName.startsWith("gemini");
+          const isFlashLite = selectedModelName.includes("flash-lite");
+
+          // Keep Google provider behavior unchanged: always include includeThoughts
+          if (isGoogle) {
+            providerOptions.google = {
+              thinkingConfig: {
+                includeThoughts: true,
+              },
+            } satisfies GoogleGenerativeAIProviderOptions;
+          }
+
+          // Vertex-specific fix: only enable thinking on supported Gemini models
+          if (isVertex && isGeminiModel && !isFlashLite && !isPartnerModel) {
+            providerOptions.google = {
+              thinkingConfig: {
+                includeThoughts: true,
+              },
+            } satisfies GoogleGenerativeAIProviderOptions;
+          }
+
+          saveFullPromptDebug({
+            systemPrompt: systemPromptOverride,
+            messages: chatMessages.filter((m) => m.content),
+            providerOptions,
+            modelName: settings.selectedModel.name,
+            chatId: req.chatId,
+          });
+
+          try {
+            const generateResult = await generateText({
+              headers: isAnthropic
+                ? {
+                    "anthropic-beta": "context-1m-2025-08-07",
+                  }
+                : undefined,
+              maxOutputTokens: await getMaxTokens(settings.selectedModel),
+              temperature: await getTemperature(settings.selectedModel),
+              maxRetries: 2,
+              model: modelClient.model,
+              stopWhen: [stepCountIs(20), hasToolCall("edit-code")],
+              providerOptions,
+              system: systemPromptOverride,
+              tools,
+              messages: chatMessages.filter((m) => m.content),
+              abortSignal: abortController.signal
+            });
+
+            // 3. Post-processing logic (Formerly 'onFinish')
+            const totalTokens = generateResult.usage?.totalTokens;
+            if (typeof totalTokens === "number") {
+              maxTokensUsed = Math.max(maxTokensUsed ?? 0, totalTokens);
+
+              // Persist the aggregated token usage
+              void db
+                .update(messages)
+                .set({ maxTokensUsed: maxTokensUsed })
+                .where(eq(messages.id, placeholderAssistantMessage.id))
+                .catch((error) => {
+                  logger.error("Failed to save total tokens for assistant message", error);
+                });
+
+              logger.log(`Total tokens used (generateText): ${maxTokensUsed}`);
+            }
+            
+            return {
+              fullStream: generateResult.text,
+              usage: generateResult.usage,
+            };
+          } catch (error: any) {
+            // 3. This replaces the 'onError' callback
+            let errorMessage = (error as any)?.error?.message;
+            const responseBody = error?.error?.responseBody;
+            if (errorMessage && responseBody) {
+              errorMessage += "\n\nDetails: " + responseBody;
+            }
+            const message = errorMessage || JSON.stringify(error);
+            const requestIdPrefix = isEngineEnabled ? `[Request ID: ${dyadRequestId}] ` : "";
+            
+            logger.error(
+              `AI generation error for request: ${requestIdPrefix} errorMessage=${errorMessage}`,
+              error
+            );
+
+            event.sender.send("chat:response:error", {
+              chatId: req.chatId,
+              error: `${AI_STREAMING_ERROR_MESSAGE_PREFIX}${requestIdPrefix}${message}`,
+            });
+
+            activeStreams.delete(req.chatId);
+            throw error; // Re-throw so the caller knows it failed
+          }
+        };
+
         let lastDbSaveAt = 0;
+
+        // DESIGN TODO END
 
         const processResponseChunkUpdate = async ({
           fullResponse,
@@ -1343,6 +1645,73 @@ ${problemReport.problems
           }
           throw streamError;
         }
+
+        // DESIGN TODO: Do the design semantic file creation or update logic here, LLM call, the processor in the background even.
+        // Do all sesign semantic file creation and update logic (this is inside else block of if test, so this is not a test prompt, so best to do design semantic file create update here)
+
+        // This ensures that it is not slowing down the user, and the LLM call is happening in the background
+        // Use the processDesignSemanticResponse
+
+        // Create a Design Semantic Prompt, either creation or update
+        // Use that as an input
+        // Create Codebase only, and add that to the chatMessage, at the end, add the last user message to it as role user, content as "Create or Update the Design Semantic file", 
+        // and provider options as sourceCommitHash null
+
+        // POTENTIAL BUG: Keep files as it is for now, but if there might be a bug then remove the files
+        // keep model client as it is
+
+        // Prepare variables for chat message history for creating and updating design file
+        const shouldUpdateDesignSemanticFile = designSemanticExists && !shouldImprovePrompt
+        const shouldCreateDesignSemanticFile = !designSemanticExists && numPastUserMessages > 2 && !shouldImprovePrompt
+        let designSemanticFilePromptOverride = ""
+        if (shouldCreateDesignSemanticFile){
+          limitedHistoryChatMessages.push({
+            role: "user",
+            content: "Create the Design Semantic File:",
+            providerOptions: {
+              "dyad-engine": {
+                sourceCommitHash: null as any,
+                commitHash: null as any,
+              },
+            },
+          });
+          designSemanticFilePromptOverride = design_prompt(false, false, designSemanticFileContent)
+        }
+        if (shouldUpdateDesignSemanticFile){
+          limitedHistoryChatMessages.push({
+            role: "user",
+            content: "Update the Design Semantic File:",
+            providerOptions: {
+              "dyad-engine": {
+                sourceCommitHash: null as any,
+                commitHash: null as any,
+              },
+            },
+          });
+          designSemanticFilePromptOverride = design_prompt(true, false, designSemanticFileContent)
+        }
+        
+        let designSemanticChatMessages: ModelMessage[] = [
+          ...codebasePrefix,
+          ...otherCodebasePrefix,
+          ...limitedHistoryChatMessages,
+        ];
+
+        const { fullStream: designSemanticModelOutput } = await simpleGenerateText({
+          chatMessages: designSemanticChatMessages,
+          modelClient,
+          files: files,
+          systemPromptOverride: designSemanticFilePromptOverride
+        });
+
+        await processDesignSemanticResponse({
+          fullResponse: designSemanticModelOutput,
+          appPath: getDyadAppPath(updatedChat.app.path),
+        });
+        // DESIGN TODO END
+
+
+
       }
 
       // Only save the response and process it if we weren't aborted
@@ -1715,3 +2084,61 @@ async function getMcpTools(event: IpcMainInvokeEvent): Promise<ToolSet> {
   }
   return mcpToolSet;
 }
+
+// DELETE: printing the prompts
+function saveFullPromptDebug({
+  systemPrompt,
+  messages,
+  providerOptions,
+  modelName,
+  chatId,
+}: {
+  systemPrompt: string;
+  messages: ModelMessage[];
+  providerOptions: any;
+  modelName: string;
+  chatId: number;
+}) {
+  try {
+    const baseDir = path.join(app.getPath("userData"), "prompt_debug");
+
+    // 1. Ensure directory exists
+    fs.mkdirSync(baseDir, { recursive: true });
+
+    // 2. Create filesystem-safe datetime filename
+    const now = new Date();
+    const fileName = now
+      .toISOString()
+      .replace(/[:.]/g, "-") + ".json";
+
+    const filePath = path.join(baseDir, fileName);
+
+    const engine = providerOptions?.["dyad-engine"];
+
+    const payload = {
+      timestamp: new Date().toISOString(),
+      model: modelName,
+      systemPrompt,
+      messages,
+      engineContext: engine
+        ? {
+            enabled: true,
+            dyadAppId: engine.dyadAppId,
+            dyadRequestId: engine.dyadRequestId,
+            dyadSmartContextMode: engine.dyadSmartContextMode,
+            fileCount: engine.dyadFiles?.length,
+            versionedFileCount: engine.dyadVersionedFiles
+              ? Object.keys(engine.dyadVersionedFiles).length
+              : undefined,
+            mentionedApps: engine.dyadMentionedApps?.map((a: any) => a.appName),
+          }
+        : { enabled: false },
+    };
+
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf8");
+    logger.log("Saved File --------------------------------------------------------------------------------------------------------------------------------------------");
+  } catch (err) {
+    logger.error("Failed to save full prompt debug", err);
+  }
+}
+// DELETE END
