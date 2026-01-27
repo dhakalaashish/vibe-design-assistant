@@ -249,12 +249,12 @@ export default function HomePage() {
             </span>
           </button>
         </div>
-        <ProBanner />
+        {/* <ProBanner /> */}
       </div>
-      <PrivacyBanner />
+      {/* <PrivacyBanner /> */}
 
       {/* Release Notes Dialog */}
-      <Dialog open={releaseNotesOpen} onOpenChange={setReleaseNotesOpen}>
+      {/* <Dialog open={releaseNotesOpen} onOpenChange={setReleaseNotesOpen}>
         <DialogContent className="max-w-4xl bg-(--docs-bg) pr-0 pt-4 pl-4 gap-1">
           <DialogHeader>
             <DialogTitle>What's new in v{appVersion}?</DialogTitle>
@@ -284,7 +284,7 @@ export default function HomePage() {
             )}
           </div>
         </DialogContent>
-      </Dialog>
+      </Dialog> */}
     </div>
   );
 }

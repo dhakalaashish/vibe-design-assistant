@@ -7,6 +7,7 @@ import {
 } from "../../atoms/appAtoms";
 
 import { CodeView } from "./CodeView";
+import { DesignView } from "./DesignView";
 import { PreviewIframe } from "./PreviewIframe";
 import { Problems } from "./Problems";
 import { ConfigurePanel } from "./ConfigurePanel";
@@ -115,7 +116,7 @@ export function PreviewPanel() {
               {previewMode === "preview" ? (
                 <PreviewIframe key={key} loading={loading} />
               ) : previewMode === "design" ? (
-                <CodeView loading={loading} app={app} />
+                <DesignView loading={loading} app={app} />
               ) : previewMode === "code" ? (
                 <CodeView loading={loading} app={app} />
               ) : previewMode === "configure" ? (
