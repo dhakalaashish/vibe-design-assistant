@@ -91,7 +91,7 @@ import {
   VersionedFiles as VersionedFiles,
 } from "../utils/versioned_codebase_context";
 import { electron } from "node:process";
-import { design_prompt } from "@/prompts/design_prompt";
+import { design_improvement_prompt, design_semantic_prompt } from "@/prompts/design_prompt";
 
 
 type AsyncIterableStream<T> = AsyncIterable<T> & ReadableStream<T>;
@@ -249,6 +249,8 @@ export function registerChatStreamHandlers() {
       }
 
       // DESIGN TODO INIT LOGIC START
+      // 0. Check if Design Assistant Enabled
+      const designAssistantEnabled = true
       // 1. Fetch the entire app history (all chats and all messages)
       const appWithFullHistory = await db.query.apps.findFirst({
         where: eq(apps.id, chat.appId),
@@ -287,7 +289,7 @@ export function registerChatStreamHandlers() {
       try {
         const stat = await fs.promises.stat(designSemanticPath);
         if (stat.isFile()) {
-          const designSemanticFileContent = await fs.promises.readFile(designSemanticPath, "utf8");
+          designSemanticFileContent = await fs.promises.readFile(designSemanticPath, "utf8");
           // Ensure the file is not just present, but actually contains data
           designSemanticExists = designSemanticFileContent.trim().length > 0;
         }
@@ -680,10 +682,14 @@ ${componentSnippet}
         // DESIGN TODO DONE: check if design is required, and if yes, create the appropriate prompt for design
         const isChatModeBuild = settings.selectedChatMode === "build"
         const hasImproveDyadTags = req.prompt.includes("<dyad-improve-prompt>")
-        const shouldImprovePrompt = !hasImproveDyadTags && isChatModeBuild // If the prompt does not include <dyad-improve-prompt and we are building
-        // if isChatModeBuild, and designSemanticExists, and shouldImprovePrompt, then we can replace the system prompt with the design prompt.
+        // const shouldImprovePrompt = !hasImproveDyadTags && isChatModeBuild // If the prompt does not include <dyad-improve-prompt and we are building
+        // DELETE: Just checking when the shouldImprovePrompt is false
+        const shouldImprovePrompt = false
+        // if shouldImprovePrompt, then we can replace the system prompt with the design prompt [This only handles prompt improvement]
         // Use designSemanticFileContent on this
-        systemPrompt = design_prompt(designSemanticExists, true, designSemanticFileContent)
+        if (shouldImprovePrompt && designAssistantEnabled) {
+          systemPrompt = design_improvement_prompt(designSemanticFileContent)
+        }
         // DESIGN TODO DONE END
 
         const isSecurityReviewIntent =
@@ -709,8 +715,9 @@ ${componentSnippet}
         }
         
 
-        // DESIGN TODO DONE: Ensure that hese supabase prompts is NOT added to the design prompts
-        if (!shouldImprovePrompt){
+        // DESIGN TODO DONE: Ensure that these supabase prompts is NOT added to the design prompts, which means only add them when not improving prompt
+        // And, when the designAssistant is not enabled
+        if (!shouldImprovePrompt && !designAssistantEnabled){
           if (
             updatedChat.app?.supabaseProjectId &&
             settings.supabase?.accessToken?.value
@@ -833,6 +840,12 @@ This conversation includes one or more image attachments. When the user uploads 
             },
           },
         }));
+        
+        let chatMessages: ModelMessage[] = [
+          ...codebasePrefix,
+          ...otherCodebasePrefix,
+          ...limitedHistoryChatMessages,
+        ];
 
         // DESIGN TODO: Update the limitedHistoryChatMessages, to be relevant to design prompt improvement. 
         // In chatMessages, we can actually keep the codebase, and otherCodebasePrefix, as that will ensure that the updated prompt is better.
@@ -841,8 +854,34 @@ This conversation includes one or more image attachments. When the user uploads 
         // This ensures that the model does not hallucinate on what it wants to do!
         // On the current user message, prepend this: "Help me give variations of improved prompts for this user prompt: "
         // Moreover, since the limitedHistoryChatMessages only removes dyad tags for the "ask" and not for "build", so we should be okay right?
+        
+        // Improvement in faulty logic
+        // For the semantic file creation and update, using designSemanticChatMessages, while for the should improve prompt update the chatMessages
 
-        if (shouldImprovePrompt){
+        let designSemanticChatMessages: ModelMessage[] = [];
+        // Prepare variables for chat message history for creating and updating design file
+        const shouldUpdateDesignSemanticFile = designSemanticExists && !shouldImprovePrompt
+        const shouldCreateDesignSemanticFile = !designSemanticExists && numPastUserMessages > 2 && !shouldImprovePrompt
+
+        if (shouldCreateDesignSemanticFile || shouldUpdateDesignSemanticFile) {
+          // For create/update: Only include codebase context + new instruction
+          designSemanticChatMessages = [
+            ...codebasePrefix,
+            ...otherCodebasePrefix,
+            {
+              role: "user",
+              content: shouldCreateDesignSemanticFile 
+                ? "Create the Design Semantic File."
+                : "Update the Design Semantic File.",
+              providerOptions: {
+                "dyad-engine": {
+                  sourceCommitHash: null as any,
+                  commitHash: null as any,
+                },
+              },
+            }
+          ];
+        } else if (shouldImprovePrompt){
           const designLimitedHistoryChatMessages = limitedMessageHistory.map((msg) => ({
             role: msg.role as "user" | "assistant" | "system",
             content: removeNonEssentialTags(msg.content),
@@ -879,18 +918,30 @@ This conversation includes one or more image attachments. When the user uploads 
             designOnlyMessageHistory.push({
               ...lastMsg,
               content:
-                "Improve the prompt based on design knowledge:\n" +
+                "Improve this prompt based on design knowledge:\n" +
                 lastMsg.content,
             });
+          } else {
+            designOnlyMessageHistory.push({
+              role: "user",
+              content: "Improve this prompt based on design knowledge:\n" +
+                req.prompt,
+              providerOptions: {
+                "dyad-engine": {
+                  sourceCommitHash: null as any,
+                  commitHash: null as any,
+                },
+              },
+            });
           }
+          // Replace the chatMessages with the new instructions for improving prompts
+          chatMessages = [
+            ...codebasePrefix,
+            ...otherCodebasePrefix,
+            ...designOnlyMessageHistory,
+          ];
         }
         // DESIGN TODO END
-
-        let chatMessages: ModelMessage[] = [
-          ...codebasePrefix,
-          ...otherCodebasePrefix,
-          ...limitedHistoryChatMessages,
-        ];
 
         // Check if the last message should include attachments
         if (chatMessages.length >= 2 && attachmentPaths.length > 0) {
@@ -905,11 +956,6 @@ This conversation includes one or more image attachments. When the user uploads 
             );
           }
         }
-
-        
-
-
-
 
         if (isSummarizeIntent) {
           const previousChat = await db.query.chats.findFirst({
@@ -1023,6 +1069,16 @@ This conversation includes one or more image attachments. When the user uploads 
             providerOptions,
             modelName: settings.selectedModel.name,
             chatId: req.chatId,
+            misc: {
+              numPastUserMessages: numPastUserMessages,
+              designSemanticExists: designSemanticExists,
+              designSemanticFileContent: designSemanticFileContent,
+              isChatModeBuild: isChatModeBuild,
+              hasImproveDyadTags: hasImproveDyadTags,
+              shouldImprovePrompt: shouldImprovePrompt,
+              shouldCreateDesignSemanticFile: shouldCreateDesignSemanticFile,
+              shouldUpdateDesignSemanticFile: shouldUpdateDesignSemanticFile
+            }
           });
 
           const streamResult = streamText({
@@ -1101,7 +1157,7 @@ This conversation includes one or more image attachments. When the user uploads 
           chatMessages,
           modelClient,
           tools,
-          systemPromptOverride = systemPrompt,
+          systemPromptOverride,
           dyadDisableFiles = false,
           files,
         }: {
@@ -1190,6 +1246,16 @@ This conversation includes one or more image attachments. When the user uploads 
             providerOptions,
             modelName: settings.selectedModel.name,
             chatId: req.chatId,
+            misc: {
+              numPastUserMessages: numPastUserMessages,
+              designSemanticExists: designSemanticExists,
+              designSemanticFileContent: designSemanticFileContent,
+              isChatModeBuild: isChatModeBuild,
+              hasImproveDyadTags: hasImproveDyadTags,
+              shouldImprovePrompt: shouldImprovePrompt,
+              shouldCreateDesignSemanticFile: shouldCreateDesignSemanticFile,
+              shouldUpdateDesignSemanticFile: shouldUpdateDesignSemanticFile
+            }
           });
 
           try {
@@ -1660,54 +1726,35 @@ ${problemReport.problems
         // POTENTIAL BUG: Keep files as it is for now, but if there might be a bug then remove the files
         // keep model client as it is
 
-        // Prepare variables for chat message history for creating and updating design file
-        const shouldUpdateDesignSemanticFile = designSemanticExists && !shouldImprovePrompt
-        const shouldCreateDesignSemanticFile = !designSemanticExists && numPastUserMessages > 2 && !shouldImprovePrompt
-        let designSemanticFilePromptOverride = ""
-        if (shouldCreateDesignSemanticFile){
-          limitedHistoryChatMessages.push({
-            role: "user",
-            content: "Create the Design Semantic File:",
-            providerOptions: {
-              "dyad-engine": {
-                sourceCommitHash: null as any,
-                commitHash: null as any,
-              },
-            },
-          });
-          designSemanticFilePromptOverride = design_prompt(false, false, designSemanticFileContent)
-        }
-        if (shouldUpdateDesignSemanticFile){
-          limitedHistoryChatMessages.push({
-            role: "user",
-            content: "Update the Design Semantic File:",
-            providerOptions: {
-              "dyad-engine": {
-                sourceCommitHash: null as any,
-                commitHash: null as any,
-              },
-            },
-          });
-          designSemanticFilePromptOverride = design_prompt(true, false, designSemanticFileContent)
-        }
-        
-        let designSemanticChatMessages: ModelMessage[] = [
-          ...codebasePrefix,
-          ...otherCodebasePrefix,
-          ...limitedHistoryChatMessages,
-        ];
+        if (shouldUpdateDesignSemanticFile || shouldCreateDesignSemanticFile){
 
-        const { fullStream: designSemanticModelOutput } = await simpleGenerateText({
-          chatMessages: designSemanticChatMessages,
-          modelClient,
-          files: files,
-          systemPromptOverride: designSemanticFilePromptOverride
-        });
+          logger.log('=== DESIGN SEMANTIC FILE GENERATION START ===');
 
-        await processDesignSemanticResponse({
-          fullResponse: designSemanticModelOutput,
-          appPath: getDyadAppPath(updatedChat.app.path),
-        });
+          const designSemanticFilePromptOverride = design_semantic_prompt(designSemanticExists, designSemanticFileContent)
+  
+          logger.log(`System prompt length: ${designSemanticFilePromptOverride.length} chars`);
+          logger.log(`Messages count: ${designSemanticChatMessages.length}`);
+
+          const { fullStream: designSemanticModelOutput } = await simpleGenerateText({
+            chatMessages: designSemanticChatMessages,
+            modelClient,
+            files: files,
+            systemPromptOverride: designSemanticFilePromptOverride
+          });
+
+          // ADD THESE LOGGING LINES:
+          logger.log('=== MODEL OUTPUT RECEIVED ===');
+          logger.log(`Output type: ${typeof designSemanticModelOutput}`);
+          logger.log(`Output length: ${designSemanticModelOutput?.length || 0} chars`);
+          logger.log(`Full output:\n${designSemanticModelOutput}`);
+          logger.log('=== END MODEL OUTPUT ===');
+  
+          await processDesignSemanticResponse({
+            fullResponse: designSemanticModelOutput,
+            appPath: getDyadAppPath(updatedChat.app.path),
+          });
+          logger.log('=== DESIGN SEMANTIC FILE GENERATION COMPLETE ===');
+        }
         // DESIGN TODO END
 
 
@@ -2086,18 +2133,32 @@ async function getMcpTools(event: IpcMainInvokeEvent): Promise<ToolSet> {
 }
 
 // DELETE: printing the prompts
+
+type Misc = {
+  numPastUserMessages: number;
+  designSemanticExists: boolean;
+  designSemanticFileContent: string;
+  isChatModeBuild: boolean;
+  hasImproveDyadTags: boolean;
+  shouldImprovePrompt: boolean;
+  shouldCreateDesignSemanticFile: boolean;
+  shouldUpdateDesignSemanticFile: boolean;
+}
+
 function saveFullPromptDebug({
   systemPrompt,
   messages,
   providerOptions,
   modelName,
   chatId,
+  misc,
 }: {
-  systemPrompt: string;
+  systemPrompt?: string;
   messages: ModelMessage[];
   providerOptions: any;
   modelName: string;
   chatId: number;
+  misc: Misc;
 }) {
   try {
     const baseDir = path.join(app.getPath("userData"), "prompt_debug");
@@ -2119,6 +2180,16 @@ function saveFullPromptDebug({
       timestamp: new Date().toISOString(),
       model: modelName,
       systemPrompt,
+      misc: misc ? {
+        numPastUserMessages: misc.numPastUserMessages,
+        designSemanticExists: misc.designSemanticExists,
+        designSemanticFileContent: misc.designSemanticFileContent,
+        isChatModeBuild: misc.isChatModeBuild,
+        hasImproveDyadTags: misc.hasImproveDyadTags,
+        shouldImprovePrompt: misc.shouldImprovePrompt,
+        shouldCreateDesignSemanticFile: misc.shouldCreateDesignSemanticFile,
+        shouldUpdateDesignSemanticFile: misc.shouldUpdateDesignSemanticFile
+      } : {},
       messages,
       engineContext: engine
         ? {

@@ -114,6 +114,8 @@ export function PreviewPanel() {
             <div className="h-full overflow-y-auto">
               {previewMode === "preview" ? (
                 <PreviewIframe key={key} loading={loading} />
+              ) : previewMode === "design" ? (
+                <CodeView loading={loading} app={app} />
               ) : previewMode === "code" ? (
                 <CodeView loading={loading} app={app} />
               ) : previewMode === "configure" ? (

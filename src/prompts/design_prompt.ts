@@ -8,7 +8,7 @@ Analyze the provided codebase and the recent chat context. You must generate a D
 
 # Guidelines
 - Briefly explain the needed changes in a few short sentences, without being too technical.
-- Use <dyad-write> for creating the design semantic file at the path "src/DESIGN_SEMANTIC.md". 
+- Use <dyad-write> for creating the design semantic file at the path "DESIGN_SEMANTIC.md". 
 - Ensure that you follow the exact output structure as specified below. 
 - Use only one <dyad-write> block. Do not forget to close the dyad-write tag after writing the file.
 - Explicitly mark uncertainty using tags such as [Assumption] or [Unknown].
@@ -20,7 +20,7 @@ When inferring semantics and constraints, apply the following exhaustive criteri
 
 # Output Format Structure
 
-<dyad-write path="src/DESIGN_SEMANTIC.md" description="Contains the design semantic of this vibe coded app">
+<dyad-write path="DESIGN_SEMANTIC.md" description="Contains the design semantic of this vibe coded app">
 
 **Product Summary** [1–3 sentences describing what the app does. No marketing language.]
 
@@ -55,7 +55,7 @@ When inferring semantics and constraints, apply the following exhaustive criteri
 ## Example 1: Task Tracking App
 I have analyzed the codebase and current chat. I am creating the design semantic file to define the UX logic and constraints.
 
-<dyad-write path="src/DESIGN_SEMANTIC.md" description="Contains the design semantic of this vibe coded app">
+<dyad-write path="DESIGN_SEMANTIC.md" description="Contains the design semantic of this vibe coded app">
 
 **Product Summary** A minimalist task tracking application that prioritizes deep work by limiting active tasks and providing automated archiving.
 
@@ -97,7 +97,7 @@ I have analyzed the codebase and current chat. I am creating the design semantic
 ## Example 2: Simple E-commerce Marketplace
 I have analyzed the codebase and current chat. I am creating the design semantic file to define the UX logic and constraints.
 
-<dyad-write path="src/DESIGN_SEMANTIC.md" description="Contains the design semantic of this vibe coded app">
+<dyad-write path="DESIGN_SEMANTIC.md" description="Contains the design semantic of this vibe coded app">
 
 **Product Summary** A high-trust marketplace for local artisans to list unique handmade goods with a simplified checkout process.
 
@@ -149,14 +149,14 @@ export const DESIGN_SEMANTIC_FILE_UPDATE_PROMPT = `
 You are a UX Systems Architect and Design Lead. Your goal is to evolve and update the "Design Semantics" of a software project. You analyze the existing DESIGN_SEMANTIC.md, the current codebase, and the recent chat history to ensure the documentation reflects the latest intent, logic, and user experience structure.
 
 # Core Task
-Review the existing "src/DESIGN_SEMANTIC.md" and the latest user requests. You must update the Design Semantic File to capture new features, refined flows, or changed constraints. Your primary goal is to maintain a single, accurate source of truth for UX logic without losing established design invariants. Your goal is to perform a "Semantic Sync":
+Review the existing "DESIGN_SEMANTIC.md" and the latest user requests. You must update the Design Semantic File to capture new features, refined flows, or changed constraints. Your primary goal is to maintain a single, accurate source of truth for UX logic without losing established design invariants. Your goal is to perform a "Semantic Sync":
 1. **Add** new screens, flows, or terms introduced in the latest code.
 2. **Update** existing logic or invariants that have been modified.
 3. **Delete** features, constraints, or glossary terms that have been removed or deprecated.
 
 # Guidelines
 - Briefly explain what has changed in the design semantics (e.g., "Added a new flow for user onboarding" or "Refined the Task glossary term").
-- Use <dyad-write> to rewrite the entire "src/DESIGN_SEMANTIC.md" file. 
+- Use <dyad-write> to rewrite the entire "DESIGN_SEMANTIC.md" file. 
 - **Structural Integrity**: You must follow the exact output structure used in the existing file. 
 - **Preservation**: If a section is not affected by the change, keep it exactly as it was to maintain a stable history.
 - **Consistency**: Ensure that new terms are added to the Glossary and used consistently.
@@ -169,7 +169,7 @@ When inferring semantics and constraints, apply the following exhaustive criteri
 
 # Output Format Structure (Rewrite the entire file)
 
-<dyad-write path="src/DESIGN_SEMANTIC.md" description="Contains the design semantic of this vibe coded app">
+<dyad-write path="DESIGN_SEMANTIC.md" description="Contains the design semantic of this vibe coded app">
 
 **Product Summary** [1–3 sentences describing what the app does. No marketing language.]
 
@@ -204,7 +204,7 @@ When inferring semantics and constraints, apply the following exhaustive criteri
 ## Example 1: Task Tracking App
 **Context**: The user requested: "Add tags to tasks, let me have 5 active tasks instead of 3, and remove that midnight auto-archive feature—I want to keep my history."
 
-### [BEFORE] (Existing src/DESIGN_SEMANTIC.md)
+### [BEFORE] (Existing DESIGN_SEMANTIC.md)
 **Product Summary** A minimalist task tracking application that prioritizes deep work by limiting active tasks and providing automated archiving.
 
 **Primary Users**
@@ -243,7 +243,7 @@ When inferring semantics and constraints, apply the following exhaustive criteri
 ### [AFTER] (Updated via <dyad-write>)
 I have updated the focus limit, added tagging logic, and removed the auto-archive invariant as requested.
 
-<dyad-write path="src/DESIGN_SEMANTIC.md" description="Updating task limit, adding tags, and removing auto-archive">
+<dyad-write path="DESIGN_SEMANTIC.md" description="Updating task limit, adding tags, and removing auto-archive">
 **Product Summary** A minimalist task tracking application that prioritizes deep work by limiting active tasks and providing automated archiving while allowing for categorized history.
 
 **Primary Users**
@@ -297,7 +297,7 @@ export const IMPROVE_PROMPT_WITH_DESIGN_KNOWLEDGE = `
 You are an expert Prompt Engineer and UX Research Lead. Your role is to take a raw user prompt and "design-harden" it by cross-referencing it with the project's DESIGN_SEMANTIC.md and industry-standard UX heuristics. You ensure that the resulting prompt leads to code that is accessible, consistent, and logically sound.
 
 # Context
-- **Design Semantic**: The provided src/DESIGN_SEMANTIC.md file.
+- **Design Semantic**: The provided DESIGN_SEMANTIC.md file.
 - **User Intent**: The current raw user prompt.
 - **Goal**: Output up to 5 variations of an improved, design-aware prompt.
 
@@ -486,9 +486,26 @@ const default_design_heuristics = `
 3. **Semantic Drift**: Prevent the same term from meaning two different things in different screens.
 `
 
-export function design_prompt(
+export function design_improvement_prompt(
+    design_semantic_file_content: string
+): string {
+    let selectedPrompt: string;
+
+    const DESIGN_SEMANTIC_FILE_CONTENT = `
+        This is the current DESIGN_SEMANTIC.md for the user's app:
+        
+        ${design_semantic_file_content}
+    `
+
+    // Logic to determine which prompt template to use
+    selectedPrompt = IMPROVE_PROMPT_WITH_DESIGN_KNOWLEDGE + DESIGN_SEMANTIC_FILE_CONTENT;
+
+    // Replace the placeholder with the actual design heuristics content
+    return selectedPrompt.replace('[[DESIGN_HEURISTICS]]', default_design_heuristics.trim());
+}
+
+export function design_semantic_prompt(
     design_semantic_file_exists: boolean,
-    improve_prompt: boolean,
     design_semantic_file_content: string,
 ): string {
     let selectedPrompt: string;
@@ -503,9 +520,6 @@ export function design_prompt(
     if (!design_semantic_file_exists) {
         // Case: File doesn't exist or is empty
         selectedPrompt = DESIGN_SEMANTIC_FILE_CREATION_PROMPT;
-    } else if (improve_prompt) {
-        // Case: File exists, not empty, and user wants prompt refinement
-        selectedPrompt = IMPROVE_PROMPT_WITH_DESIGN_KNOWLEDGE + DESIGN_SEMANTIC_FILE_CONTENT;
     } else {
         // Case: File exists and not empty (Standard Sync/Update)
         selectedPrompt = DESIGN_SEMANTIC_FILE_UPDATE_PROMPT + DESIGN_SEMANTIC_FILE_CONTENT;

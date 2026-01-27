@@ -14,14 +14,23 @@ import { useSettings } from "@/hooks/useSettings";
 import type { ChatMode } from "@/lib/schemas";
 import { cn } from "@/lib/utils";
 import { detectIsMac } from "@/hooks/useChatModeToggle";
+import { previewModeAtom } from "@/atoms/appAtoms";
+import { useSetAtom } from "jotai";
 
 export function ChatModeSelector() {
   const { settings, updateSettings } = useSettings();
 
   const selectedMode = settings?.selectedChatMode || "build";
 
+  const setPreviewMode = useSetAtom(previewModeAtom);
+
   const handleModeChange = (value: string) => {
     updateSettings({ selectedChatMode: value as ChatMode });
+
+    // DESIGN: when clicked on "Guided Build", the Design PreviewMode is toggled
+    if (value === "guided") {
+      setPreviewMode("design");
+    }
   };
 
   const getModeDisplayName = (mode: ChatMode) => {
@@ -32,6 +41,8 @@ export function ChatModeSelector() {
         return "Ask";
       case "agent":
         return "Agent";
+      case "guided":
+        return "Guided Build"
       default:
         return "Build";
     }
@@ -70,6 +81,14 @@ export function ChatModeSelector() {
             <span className="font-medium">Build</span>
             <span className="text-xs text-muted-foreground">
               Generate and edit code
+            </span>
+          </div>
+        </SelectItem>
+        <SelectItem value="guided">
+          <div className="flex flex-col items-start">
+            <span className="font-medium">Guided Build</span>
+            <span className="text-xs text-muted-foreground">
+              Improve prompt for better design
             </span>
           </div>
         </SelectItem>
