@@ -9,6 +9,9 @@ export const chatErrorByIdAtom = atom<Map<number, string | null>>(new Map());
 // Atom to hold the currently selected chat ID
 export const selectedChatIdAtom = atom<number | null>(null);
 
+// Atom to hold the nested navigation history between chats
+export const chatNavigationStackAtom = atom<number[]>([]);
+
 export const isStreamingByIdAtom = atom<Map<number, boolean>>(new Map());
 export const chatInputValueAtom = atom<string>("");
 export const homeChatInputValueAtom = atom<string>("");

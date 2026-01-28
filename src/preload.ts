@@ -20,6 +20,7 @@ const validInvokeChannels = [
   "chat:stream",
   "chat:count-tokens",
   "create-chat",
+  "chat:insert-message", // Adding this to preload
   "create-app",
   "copy-app",
   "get-chat",

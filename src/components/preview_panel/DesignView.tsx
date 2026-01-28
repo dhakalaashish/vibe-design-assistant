@@ -5,7 +5,7 @@ import { RefreshCw } from "lucide-react";
 import { useLoadApp } from "@/hooks/useLoadApp";
 import { useAtomValue, useAtom, useSetAtom } from "jotai";
 import { selectedFileAtom } from "@/atoms/viewAtoms";
-import { useDesignSemanticInNewChat } from "../chat/DesignSemanticInNewChat";
+import { useDesignSemanticInNewChat } from "../chat/DesignInNewChat";
 import { designCreationModeAtom } from "@/atoms/designAtoms";
 
 

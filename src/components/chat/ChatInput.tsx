@@ -19,13 +19,15 @@ import {
 } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
-
+import { useNavigate } from "@tanstack/react-router";
 import { useSettings } from "@/hooks/useSettings";
 import { IpcClient } from "@/ipc/ipc_client";
 import {
   chatInputValueAtom,
   chatMessagesByIdAtom,
   selectedChatIdAtom,
+  chatNavigationStackAtom,
+  chatsAtom
 } from "@/atoms/chatAtoms";
 import { atom, useAtom, useSetAtom, useAtomValue } from "jotai";
 import { useStreamChat } from "@/hooks/useStreamChat";
@@ -52,7 +54,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "../ui/tooltip";
-
+import {DESIGN_BUILD_TITLE_PREFIX, PROMPT_IMPROVEMENT_TITLE_PREFIX} from "@/components/chat/DesignInNewChat"
 import { useVersions } from "@/hooks/useVersions";
 import { useAttachments } from "@/hooks/useAttachments";
 import { AttachmentsList } from "./AttachmentsList";
@@ -70,6 +72,7 @@ import { SelectedComponentsDisplay } from "./SelectedComponentDisplay";
 import { useCheckProblems } from "@/hooks/useCheckProblems";
 import { LexicalChatInput } from "./LexicalChatInput";
 import { useChatModeToggle } from "@/hooks/useChatModeToggle";
+import { improvePromptInNewChat } from "../chat/DesignInNewChat";
 
 const showTokenBarAtom = atom(false);
 
@@ -561,6 +564,72 @@ function KeepGoingButton() {
   );
 }
 
+function DoneButton() {
+  const chatId = useAtomValue(selectedChatIdAtom);
+  const { streamMessage } = useStreamChat();
+
+  // Access the navigation stack
+  const [navigationStack, setNavigationStack] = useAtom(chatNavigationStackAtom);
+  const navigate = useNavigate();
+  
+  const onClick = async () => {
+    if (!chatId) {
+      console.error("No chat id found");
+      return;
+    }
+
+    try {
+      // Fetch the chat to check its title
+      const chat = await IpcClient.getInstance().getChat(chatId);
+      const title = chat.title || "";
+      
+      let prompt = "";
+
+      // Logic: Check title to determine intent
+      // We use .includes() to handle variations like "# Design Semantic File" 
+      // or the "Design Semantic Build Together" title we generated earlier.
+      if (title.includes("Design Semantic")) {
+        prompt = "I am done. Please compile the DESIGN_SEMANTIC.md file now.";
+      } else if (title.includes("Prompt Improvement")) {
+        prompt = "I am done. Let's choose this as the final prompt now";
+      }
+
+      // streamMessage({
+      //   prompt,
+      //   chatId,
+      //   redo: false,
+      // });
+
+      // POP FROM STACK: Check if we have a history to return to
+      if (navigationStack.length > 0) {
+        // Get the last ID
+        const previousChatId = navigationStack[navigationStack.length - 1];
+        
+        // Remove it from the stack
+        setNavigationStack((prev) => prev.slice(0, -1));
+
+        // Navigate back
+        setTimeout(() => {
+           navigate({ to: "/chat", search: { id: previousChatId } });
+        }, 100);
+      }
+
+    } catch (error) {
+      console.error("Error handling Done action:", error);
+    }
+  };
+
+  return (
+    <SuggestionButton 
+      onClick={onClick} 
+      tooltipText="Finish the interview, and generate the result"
+    >
+      <Check size={16} className="mr-2" />
+      Done
+    </SuggestionButton>
+  );
+}
+
 export function mapActionToButton(action: SuggestedAction) {
   switch (action.id) {
     case "summarize-in-new-chat":
@@ -588,10 +657,25 @@ export function mapActionToButton(action: SuggestedAction) {
 }
 
 function ActionProposalActions({ proposal }: { proposal: ActionProposal }) {
+  // Use atoms to get the current chat title
+  const chats = useAtomValue(chatsAtom);
+  const selectedChatId = useAtomValue(selectedChatIdAtom);
+  
+  const currentChat = chats.find((c) => c.id === selectedChatId);
+  const title = currentChat?.title || "";
+
+  // Check if title starts with the specific prefixes
+  const showDoneButton = 
+    title.startsWith(DESIGN_BUILD_TITLE_PREFIX) || 
+    title.startsWith(PROMPT_IMPROVEMENT_TITLE_PREFIX);
+
   return (
     <div className="border-b border-border p-2 pb-0 flex items-center justify-between">
       <div className="flex items-center space-x-2 overflow-x-auto pb-2">
         {proposal.actions.map((action) => mapActionToButton(action))}
+
+        {/* Conditionally render DoneButton based on title */}
+        {showDoneButton && <DoneButton />}
       </div>
     </div>
   );

@@ -493,6 +493,22 @@ export class IpcClient {
     await this.ipcRenderer.invoke("delete-chat", chatId);
   }
 
+  public async insertMessage({
+    chatId,
+    role,
+    content,
+  }: {
+    chatId: number;
+    role: "user" | "assistant" | "system";
+    content: string;
+  }): Promise<Message> {
+    return this.ipcRenderer.invoke("chat:insert-message", {
+      chatId,
+      role,
+      content,
+    });
+  }
+
   public async deleteMessages(chatId: number): Promise<void> {
     await this.ipcRenderer.invoke("delete-messages", chatId);
   }
