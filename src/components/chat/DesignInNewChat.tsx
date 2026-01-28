@@ -42,21 +42,18 @@ export function useDesignSemanticInNewChat() {
       const uuid = uuidv4();
       await IpcClient.getInstance().updateChat({
         chatId: newChatId,
-        title: `${PROMPT_IMPROVEMENT_TITLE_PREFIX} ${uuid}`,
+        title: `${DESIGN_BUILD_TITLE_PREFIX} ${uuid}`,
       });
       // 3. Insert the Assistant's greeting directly into the DB
       // This ensures it appears "on top" as the first message
       await IpcClient.getInstance().insertMessage({
         chatId: newChatId,
         role: "assistant",
-        content: PROMPT_IMPROVEMENT_GREETING  ,
+        content: DESIGN_BUILD_GREETING,
       });
       // navigate to the new chat
       await navigate({ to: "/chat", search: { id: newChatId } });
-      // await streamMessage({
-      //   prompt: "Let's build your app's Design Semantic File together. I will act as your UX Lead and interview you about your app's core purpose, user flows, and critical design rules. \n \n Once we have a solid blueprint, I will generate the file for you. If the design matches your vision, click the 'Done' button below to lock it in \n \n To get started: In one sentence, what is the single most important thing a user must be able to do in your app?",
-      //   chatId: newChatId,
-      // });
+      
     } catch (err) {
       showError(err);
     }
@@ -93,7 +90,7 @@ export function improvePromptInNewChat() {
 
   const navigate = useNavigate();
 
-  const handlePromptImprovement = async () => {
+  const handlePromptImprovement = async (initialPrompt?: string) => {
     if (!appId) {
       console.error("No app id found");
       return;
@@ -111,21 +108,27 @@ export function improvePromptInNewChat() {
       const uuid = uuidv4();
       await IpcClient.getInstance().updateChat({
         chatId: newChatId,
-        title: `${DESIGN_BUILD_TITLE_PREFIX} ${uuid}`,
+        title: `${PROMPT_IMPROVEMENT_TITLE_PREFIX} ${uuid}`,
       });
       // 3. Insert the Assistant's greeting directly into the DB
-      // This ensures it appears "on top" as the first message
       await IpcClient.getInstance().insertMessage({
         chatId: newChatId,
         role: "assistant",
-        content: DESIGN_BUILD_GREETING,
+        content: PROMPT_IMPROVEMENT_GREETING,
       });
+      
       // navigate to the new chat
       await navigate({ to: "/chat", search: { id: newChatId } });
-      // await streamMessage({
-      //   prompt: "Let's build your app's Design Semantic File together. I will act as your UX Lead and interview you about your app's core purpose, user flows, and critical design rules. \n \n Once we have a solid blueprint, I will generate the file for you. If the design matches your vision, click the 'Done' button below to lock it in \n \n To get started: In one sentence, what is the single most important thing a user must be able to do in your app?",
-      //   chatId: newChatId,
-      // });
+
+      // If there was a prompt, stream it immediately in the new chat
+      if (initialPrompt && initialPrompt.trim()) {
+        streamMessage({
+          prompt: initialPrompt,
+          chatId: newChatId,
+          redo: false
+        });
+      }
+
     } catch (err) {
       showError(err);
     }
@@ -134,4 +137,3 @@ export function improvePromptInNewChat() {
 
   return { handlePromptImprovement };
 }
-

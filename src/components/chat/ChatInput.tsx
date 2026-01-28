@@ -54,7 +54,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "../ui/tooltip";
-import {DESIGN_BUILD_TITLE_PREFIX, PROMPT_IMPROVEMENT_TITLE_PREFIX} from "@/components/chat/DesignInNewChat"
+import {DESIGN_BUILD_TITLE_PREFIX, 
+  PROMPT_IMPROVEMENT_TITLE_PREFIX,
+  improvePromptInNewChat
+} from "@/components/chat/DesignInNewChat"
 import { useVersions } from "@/hooks/useVersions";
 import { useAttachments } from "@/hooks/useAttachments";
 import { AttachmentsList } from "./AttachmentsList";
@@ -72,7 +75,6 @@ import { SelectedComponentsDisplay } from "./SelectedComponentDisplay";
 import { useCheckProblems } from "@/hooks/useCheckProblems";
 import { LexicalChatInput } from "./LexicalChatInput";
 import { useChatModeToggle } from "@/hooks/useChatModeToggle";
-import { improvePromptInNewChat } from "../chat/DesignInNewChat";
 
 const showTokenBarAtom = atom(false);
 
@@ -119,6 +121,12 @@ export function ChatInput({ chatId }: { chatId?: number }) {
   const { proposal, messageId } = proposalResult ?? {};
   useChatModeToggle();
 
+  // Use the improvePrompt hook
+  const { handlePromptImprovement } = improvePromptInNewChat();
+
+  // Need to access chats to check title
+  const chats = useAtomValue(chatsAtom)
+
   const lastMessage = (chatId ? (messagesById.get(chatId) ?? []) : []).at(-1);
   const disableSendButton =
     lastMessage?.role === "assistant" &&
@@ -155,6 +163,26 @@ export function ChatInput({ chatId }: { chatId?: number }) {
     }
 
     const currentInput = inputValue;
+
+    // Check if must handleImprove Prompt
+
+    if (settings?.selectedChatMode === "guided") {
+      const currentChat = chats.find(c => c.id === chatId);
+      const title = currentChat?.title || "";
+      
+      // If we are NOT already in a special guided session
+      const isSpecialSession = title.startsWith(DESIGN_BUILD_TITLE_PREFIX) || title.startsWith(PROMPT_IMPROVEMENT_TITLE_PREFIX);
+      
+      if (!isSpecialSession) {
+        setInputValue(""); // Clear input
+        
+        // Pass the input to the new chat handler
+        await handlePromptImprovement(currentInput);
+        return; 
+      }
+    }
+
+
     setInputValue("");
 
     // Use all selected components for multi-component editing
@@ -568,6 +596,8 @@ function DoneButton() {
   const chatId = useAtomValue(selectedChatIdAtom);
   const { streamMessage } = useStreamChat();
 
+  const { updateSettings } = useSettings();
+
   // Access the navigation stack
   const [navigationStack, setNavigationStack] = useAtom(chatNavigationStackAtom);
   const navigate = useNavigate();
@@ -608,12 +638,14 @@ function DoneButton() {
         // Remove it from the stack
         setNavigationStack((prev) => prev.slice(0, -1));
 
+        // Switch mode back to "Build"
+        updateSettings({ selectedChatMode: "build" });
+
         // Navigate back
         setTimeout(() => {
            navigate({ to: "/chat", search: { id: previousChatId } });
         }, 100);
       }
-
     } catch (error) {
       console.error("Error handling Done action:", error);
     }
