@@ -1,3 +1,4 @@
+import { app } from "electron"
 import { v4 as uuidv4 } from "uuid";
 import { ipcMain, IpcMainInvokeEvent } from "electron";
 import {
@@ -475,14 +476,14 @@ ${componentSnippet}
         // we handle this specially below.
         const chatContext =
           req.selectedComponents &&
-          req.selectedComponents.length > 0 &&
-          !isSmartContextEnabled
+            req.selectedComponents.length > 0 &&
+            !isSmartContextEnabled
             ? {
-                contextPaths: req.selectedComponents.map((component) => ({
-                  globPath: component.relativePath,
-                })),
-                smartContextAutoIncludes: [],
-              }
+              contextPaths: req.selectedComponents.map((component) => ({
+                globPath: component.relativePath,
+              })),
+              smartContextAutoIncludes: [],
+            }
             : validateChatContext(updatedChat.app.chatContext);
 
         // Extract codebase for current app
@@ -669,6 +670,17 @@ ${componentSnippet}
           systemPrompt = SUMMARIZE_CHAT_SYSTEM_PROMPT;
         }
 
+        // DESIGN START
+        
+        // TODO:
+        // 1. const buildDesignSemanticTogetherIntent = Boolean when the title of the chat starts with DESIGN_BUILD_TITLE_PREFIX
+        // 2. if buildDesignSemanticTogetherIntent, systemPrompt = DESIGN_SEMANTIC_INTERACTIVE_BUILD_PROMPT
+
+        // 1. const promptImprovementIntent = Boolean when the title of the chat starts with PROMPT_IMPROVEMENT_TITLE_PREFIX
+        // 2. if promptImprovementIntent, systemPrompt = IMPROVE_PROMPT_INTERACTIVE_SESSION_PROMPT        
+
+        // DESIGN END
+
         // Update the system prompt for images if there are image attachments
         const hasImageAttachments =
           req.attachments &&
@@ -716,32 +728,32 @@ This conversation includes one or more image attachments. When the user uploads 
 
         const codebasePrefix = isEngineEnabled
           ? // No codebase prefix if engine is set, we will take of it there.
-            []
+          []
           : ([
-              {
-                role: "user",
-                content: createCodebasePrompt(codebaseInfo),
-              },
-              {
-                role: "assistant",
-                content: "OK, got it. I'm ready to help",
-              },
-            ] as const);
+            {
+              role: "user",
+              content: createCodebasePrompt(codebaseInfo),
+            },
+            {
+              role: "assistant",
+              content: "OK, got it. I'm ready to help",
+            },
+          ] as const);
 
         // If engine is enabled, we will send the other apps codebase info to the engine
         // and process it with smart context.
         const otherCodebasePrefix =
           otherAppsCodebaseInfo && !isEngineEnabled
             ? ([
-                {
-                  role: "user",
-                  content: createOtherAppsCodebasePrompt(otherAppsCodebaseInfo),
-                },
-                {
-                  role: "assistant",
-                  content: "OK.",
-                },
-              ] as const)
+              {
+                role: "user",
+                content: createOtherAppsCodebasePrompt(otherAppsCodebaseInfo),
+              },
+              {
+                role: "assistant",
+                content: "OK.",
+              },
+            ] as const)
             : [];
 
         const limitedHistoryChatMessages = limitedMessageHistory.map((msg) => ({
@@ -886,11 +898,22 @@ This conversation includes one or more image attachments. When the user uploads 
             } satisfies GoogleGenerativeAIProviderOptions;
           }
 
+          saveFullPromptDebug({
+            systemPrompt: systemPromptOverride,
+            messages: chatMessages.filter((m) => m.content),
+            providerOptions,
+            modelName: settings.selectedModel.name,
+            chatId: req.chatId,
+            misc: {
+              chatMode: settings.selectedChatMode,
+            }
+          });
+
           const streamResult = streamText({
             headers: isAnthropic
               ? {
-                  "anthropic-beta": "context-1m-2025-08-07",
-                }
+                "anthropic-beta": "context-1m-2025-08-07",
+              }
               : undefined,
             maxOutputTokens: await getMaxTokens(settings.selectedModel),
             temperature: await getTemperature(settings.selectedModel),
@@ -1214,11 +1237,11 @@ ${formattedSearchReplaceIssues}`,
               ) {
                 fullResponse += `<dyad-problem-report summary="${problemReport.problems.length} problems">
 ${problemReport.problems
-  .map(
-    (problem) =>
-      `<problem file="${escapeXml(problem.file)}" line="${problem.line}" column="${problem.column}" code="${problem.code}">${escapeXml(problem.message)}</problem>`,
-  )
-  .join("\n")}
+                    .map(
+                      (problem) =>
+                        `<problem file="${escapeXml(problem.file)}" line="${problem.line}" column="${problem.column}" code="${problem.code}">${escapeXml(problem.message)}</problem>`,
+                    )
+                    .join("\n")}
 </dyad-problem-report>`;
 
                 logger.info(
@@ -1473,7 +1496,7 @@ ${problemReport.problems
     // Clean up uploads state for this chat
     try {
       FileUploadsState.getInstance().clear(chatId);
-    } catch {}
+    } catch { }
 
     return true;
   });
@@ -1715,3 +1738,72 @@ async function getMcpTools(event: IpcMainInvokeEvent): Promise<ToolSet> {
   }
   return mcpToolSet;
 }
+
+
+// DELETE: printing the prompts
+
+type Misc = {
+  chatMode: string | undefined;
+}
+
+function saveFullPromptDebug({
+  systemPrompt,
+  messages,
+  providerOptions,
+  modelName,
+  chatId,
+  misc,
+}: {
+  systemPrompt?: string;
+  messages: ModelMessage[];
+  providerOptions: any;
+  modelName: string;
+  chatId: number;
+  misc: Misc;
+}) {
+  try {
+    const baseDir = path.join(app.getPath("userData"), "prompt_debug");
+
+    // 1. Ensure directory exists
+    fs.mkdirSync(baseDir, { recursive: true });
+
+    // 2. Create filesystem-safe datetime filename
+    const now = new Date();
+    const fileName = now
+      .toISOString()
+      .replace(/[:.]/g, "-") + ".json";
+
+    const filePath = path.join(baseDir, fileName);
+
+    const engine = providerOptions?.["dyad-engine"];
+
+    const payload = {
+      timestamp: new Date().toISOString(),
+      model: modelName,
+      systemPrompt,
+      misc: misc ? {
+        chatMode: misc.chatMode,
+      } : {},
+      messages,
+      engineContext: engine
+        ? {
+          enabled: true,
+          dyadAppId: engine.dyadAppId,
+          dyadRequestId: engine.dyadRequestId,
+          dyadSmartContextMode: engine.dyadSmartContextMode,
+          fileCount: engine.dyadFiles?.length,
+          versionedFileCount: engine.dyadVersionedFiles
+            ? Object.keys(engine.dyadVersionedFiles).length
+            : undefined,
+          mentionedApps: engine.dyadMentionedApps?.map((a: any) => a.appName),
+        }
+        : { enabled: false },
+    };
+
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf8");
+    logger.log("Saved File --------------------------------------------------------------------------------------------------------------------------------------------");
+  } catch (err) {
+    logger.error("Failed to save full prompt debug", err);
+  }
+}
+// DELETE END
