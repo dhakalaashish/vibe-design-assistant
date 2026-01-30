@@ -775,10 +775,11 @@ Begin your Gap Analysis.
 `;
 
 export function gap_analysis_with_design_semantic_prompt(
-  design_semantic_file_content: string
+    design_semantic_file_content: string
 ): string {
-  return GAP_ANALYSIS_DESIGN_SEMANTIC
-    .replace('[[DESIGN_HEURISTICS]]', default_design_heuristics.trim())
+    return GAP_ANALYSIS_DESIGN_SEMANTIC
+        .replace('[[DESIGN_HEURISTICS]]', default_design_heuristics.trim())
+        .replace('[[DESIGN_SEMANTICS]]', default_design_heuristics.trim())
 }
 
 export function design_improvement_prompt(
@@ -794,7 +795,7 @@ export function design_improvement_prompt(
 
     // Logic to determine which prompt template to use
     selectedPrompt = IMPROVE_PROMPT_INTERACTIVE_SESSION;
-    
+
     // Replace the placeholder with the actual design heuristics content
     return selectedPrompt.replace('[[DESIGN_HEURISTICS]]', default_design_heuristics.trim()).replace('[[DESIGN_SEMANTICS]]', DESIGN_SEMANTIC_FILE_CONTENT.trim());
 }

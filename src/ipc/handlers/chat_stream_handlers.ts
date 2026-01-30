@@ -15,6 +15,7 @@ import {
   DESIGN_SEMANTIC_INFER_PROMPT,
   DESIGN_SEMANTIC_INTERACTIVE_BUILD_PROMPT,
   design_improvement_prompt,
+  gap_analysis_with_design_semantic_prompt,
 } from "../../prompts/design_prompt";
 import { db } from "../../db";
 import { chats, messages } from "../../db/schema";
@@ -729,6 +730,14 @@ ${componentSnippet}
           systemPrompt = DESIGN_SEMANTIC_INFER_PROMPT;
           isCodebaseNeeded = true;
         }
+
+        const isAutoBuildIntent = req.prompt.startsWith("/auto-build");
+        if (isAutoBuildIntent) {
+          // Use the Gap Analysis prompt, injecting the design semantics content
+          systemPrompt = gap_analysis_with_design_semantic_prompt(designSemanticFileContent);
+          isCodebaseNeeded = true; 
+        }
+
         // DESIGN END 2
 
         // Update the system prompt for images if there are image attachments
