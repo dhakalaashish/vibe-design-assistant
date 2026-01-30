@@ -10,6 +10,7 @@ import { v4 as uuidv4 } from "uuid";
 
 export const DESIGN_BUILD_GREETING = "Let's build your app's Design Semantic File together. I will act as your UX Lead and interview you about your app's core purpose, user flows, and critical design rules. \n\nOnce we have a solid blueprint, I will generate the file for you. If the design matches your vision, click the **'Done'** button below to lock it in.\n\n**To get started:** What is your app about?";
 export const PROMPT_IMPROVEMENT_GREETING = "I will help you refine your requirements to ensure the best possible UX/UI outcome. We will iterate on your prompt together to catch edge cases and design flaws.\n\nWhen you are satisfied with the refined prompt, click **'Done'** to finalize it.\n\n**I see you have an idea. Let's analyze it.**";
+export const INFER_DESIGN_SEMANTIC_USER_MESSAGE = "Given the codebase, and any of the old messages, build the DESIGN_SEMANTIC.md file."
 
 export const DESIGN_BUILD_TITLE_PREFIX = "# Design Semantic Build Together"
 export const PROMPT_IMPROVEMENT_TITLE_PREFIX = "# Prompt Improvement For UX"
@@ -53,11 +54,10 @@ export function useDesignSemanticInNewChat() {
       });
       // navigate to the new chat
       await navigate({ to: "/chat", search: { id: newChatId } });
-      
+
     } catch (err) {
       showError(err);
     }
-    setDesignMode(null);
   };
 
   const handleDesignSemanticInfer = async () => {
@@ -70,7 +70,14 @@ export function useDesignSemanticInNewChat() {
       return;
     }
     try {
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      // TODO
+      setTimeout(() => {
+        streamMessage({
+          prompt: INFER_DESIGN_SEMANTIC_USER_MESSAGE, // Run the improved prompt!
+          chatId: chatId,
+          redo: false,
+        });
+      }, 200);
     } catch (err) {
       showError(err);
     }
@@ -116,7 +123,7 @@ export function improvePromptInNewChat() {
         role: "assistant",
         content: PROMPT_IMPROVEMENT_GREETING,
       });
-      
+
       // navigate to the new chat
       await navigate({ to: "/chat", search: { id: newChatId } });
 

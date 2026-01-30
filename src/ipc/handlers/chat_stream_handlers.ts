@@ -11,7 +11,11 @@ import {
   stepCountIs,
   hasToolCall,
 } from "ai";
-
+import {
+  DESIGN_SEMANTIC_INFER_PROMPT,
+  DESIGN_SEMANTIC_INTERACTIVE_BUILD_PROMPT,
+  design_improvement_prompt,
+} from "../../prompts/design_prompt";
 import { db } from "../../db";
 import { chats, messages } from "../../db/schema";
 import { and, eq, isNull } from "drizzle-orm";
@@ -88,6 +92,7 @@ import {
   processChatMessagesWithVersionedFiles as getVersionedFiles,
   VersionedFiles as VersionedFiles,
 } from "../utils/versioned_codebase_context";
+import { DESIGN_BUILD_TITLE_PREFIX, INFER_DESIGN_SEMANTIC_USER_MESSAGE, PROMPT_IMPROVEMENT_TITLE_PREFIX } from "@/components/chat/DesignInNewChat";
 
 type AsyncIterableStream<T> = AsyncIterable<T> & ReadableStream<T>;
 
@@ -242,6 +247,20 @@ export function registerChatStreamHandlers() {
       if (!chat) {
         throw new Error(`Chat not found: ${req.chatId}`);
       }
+
+      // DESIGN START 1 - get all important informations
+      const appPath = chat.app.path;
+      let designSemanticFileContent = "";
+      const designSemanticPath = path.join(getDyadAppPath(appPath), "DESIGN_SEMANTIC.md")
+      try {
+        const stat = await fs.promises.stat(designSemanticPath);
+        if (stat.isFile()) {
+          designSemanticFileContent = await fs.promises.readFile(designSemanticPath, "utf8");
+        }
+      } catch {
+        designSemanticFileContent = "";
+      }
+      // DESIGN END 1
 
       // Handle redo option: remove the most recent messages if needed
       if (req.redo) {
@@ -670,16 +689,47 @@ ${componentSnippet}
           systemPrompt = SUMMARIZE_CHAT_SYSTEM_PROMPT;
         }
 
-        // DESIGN START
-        
+        // DESIGN START 2 - Conditionally updating System Prompt mkm ik
         // TODO:
         // 1. const buildDesignSemanticTogetherIntent = Boolean when the title of the chat starts with DESIGN_BUILD_TITLE_PREFIX
         // 2. if buildDesignSemanticTogetherIntent, systemPrompt = DESIGN_SEMANTIC_INTERACTIVE_BUILD_PROMPT
+        const chatTitle = chat.title || "";
+        let isCodebaseNeeded = true; // when codebase is not needed, we can disable this
+        const buildDesignSemanticTogetherIntent = chatTitle.startsWith(DESIGN_BUILD_TITLE_PREFIX)
+        if (buildDesignSemanticTogetherIntent) {
+          systemPrompt = DESIGN_SEMANTIC_INTERACTIVE_BUILD_PROMPT;
+          isCodebaseNeeded = false;
+        }
 
         // 1. const promptImprovementIntent = Boolean when the title of the chat starts with PROMPT_IMPROVEMENT_TITLE_PREFIX
         // 2. if promptImprovementIntent, systemPrompt = IMPROVE_PROMPT_INTERACTIVE_SESSION_PROMPT        
+        const promptImprovementIntent = chatTitle.startsWith(PROMPT_IMPROVEMENT_TITLE_PREFIX)
+        if (promptImprovementIntent) {
+          // We need to inject the "Original Prompt" into the system prompt so the AI knows what it's improving.
+          // The "Original Prompt" is the first user message in this chat history.
+          const userMessages = updatedChat.messages.filter(
+            (m) =>
+              m.role === "user" &&
+              // Filter out internal codebase prompts just in case they exist in DB
+              !m.content.startsWith(CODEBASE_PROMPT_PREFIX),
+          );
+          // If this is the first turn, the current req.prompt is the initial prompt.
+          // If this is a later turn, the first message in history is the initial prompt.
+          const initialPrompt =
+            userMessages.length > 0 ? userMessages[0].content : req.prompt;
 
-        // DESIGN END
+          systemPrompt = design_improvement_prompt(
+            designSemanticFileContent,
+          ).replace("[[PROMPT_TO_BE_IMPROVED]]", initialPrompt);
+          isCodebaseNeeded = true;
+        }
+
+        const inferDesignSemanticIntent = req.prompt === INFER_DESIGN_SEMANTIC_USER_MESSAGE
+        if (inferDesignSemanticIntent) {
+          systemPrompt = DESIGN_SEMANTIC_INFER_PROMPT;
+          isCodebaseNeeded = true;
+        }
+        // DESIGN END 2
 
         // Update the system prompt for images if there are image attachments
         const hasImageAttachments =
@@ -725,8 +775,8 @@ This conversation includes one or more image attachments. When the user uploads 
 5. For screenshots of code or errors, try to identify the issue or explain the code.
 `;
         }
-
-        const codebasePrefix = isEngineEnabled
+        // If !isCodebaseNeeded, these arrays become empty [], effectively removing them from the chat
+        const codebasePrefix = (!isCodebaseNeeded || isEngineEnabled)
           ? // No codebase prefix if engine is set, we will take of it there.
           []
           : ([
@@ -743,7 +793,7 @@ This conversation includes one or more image attachments. When the user uploads 
         // If engine is enabled, we will send the other apps codebase info to the engine
         // and process it with smart context.
         const otherCodebasePrefix =
-          otherAppsCodebaseInfo && !isEngineEnabled
+          (isCodebaseNeeded && otherAppsCodebaseInfo && !isEngineEnabled)
             ? ([
               {
                 role: "user",

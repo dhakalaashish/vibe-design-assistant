@@ -600,6 +600,7 @@ function DoneButton() {
 
   // Access the navigation stack
   const [navigationStack, setNavigationStack] = useAtom(chatNavigationStackAtom);
+  const messagesById = useAtomValue(chatMessagesByIdAtom); // Need this to find the improved prompt
   const navigate = useNavigate();
   
   const onClick = async () => {
@@ -613,22 +614,74 @@ function DoneButton() {
       const chat = await IpcClient.getInstance().getChat(chatId);
       const title = chat.title || "";
       
-      let prompt = "";
+      // let prompt = "";
 
       // Logic: Check title to determine intent
       // We use .includes() to handle variations like "# Design Semantic File" 
       // or the "Design Semantic Build Together" title we generated earlier.
-      if (title.includes("Design Semantic")) {
-        prompt = "I am done. Please compile the DESIGN_SEMANTIC.md file now.";
-      } else if (title.includes("Prompt Improvement")) {
-        prompt = "I am done. Let's choose this as the final prompt now";
-      }
+      // if (title.includes("Design Semantic")) {
+      //   prompt = "I am done. Please compile the DESIGN_SEMANTIC.md file now.";
+      // } else if (title.includes("Prompt Improvement")) {
+      //   prompt = "I am done. Let's choose this as the final prompt now";
+      // }
 
       // streamMessage({
       //   prompt,
       //   chatId,
       //   redo: false,
       // });
+
+      // 1. Handle Prompt Improvement Completion
+      if (title.startsWith(PROMPT_IMPROVEMENT_TITLE_PREFIX)) {
+        // Find the LAST assistant message containing the <dyad-improved-prompt> tag
+        const currentMessages = messagesById.get(chatId) || [];
+        const lastImprovedMessage = [...currentMessages].reverse().find(
+          m => m.role === "assistant" && m.content.includes("<dyad-improved-prompt>")
+        );
+
+        // Extract content between tags
+        const improvedPromptMatch = lastImprovedMessage?.content.match(
+          /<dyad-improved-prompt>([\s\S]*?)<\/dyad-improved-prompt>/
+        );
+        
+        const finalPrompt = improvedPromptMatch ? improvedPromptMatch[1].trim() : null;
+
+        if (finalPrompt && navigationStack.length > 0) {
+          // Get original chat ID
+          const originalChatId = navigationStack[navigationStack.length - 1];
+          
+          // Pop stack
+          setNavigationStack((prev) => prev.slice(0, -1));
+          
+          // Switch to Build mode
+          updateSettings({ selectedChatMode: "build" });
+
+          // Navigate and RUN the prompt
+          navigate({ to: "/chat", search: { id: originalChatId } });
+          
+          // Small timeout to allow navigation to settle before streaming
+          setTimeout(() => {
+            streamMessage({
+              prompt: finalPrompt, // Run the improved prompt!
+              chatId: originalChatId,
+              redo: false,
+            });
+          }, 200);
+          return; // Exit early since we handled the flow
+        }
+      }
+
+      // // 2. Handle Design Semantic Completion (Original Logic)
+      // let prompt = "I am done. Please compile the DESIGN_SEMANTIC.md file now.";
+      
+      // // Standard flow for Design Semantics (just finish in current chat)
+      // streamMessage({
+      //   prompt,
+      //   chatId,
+      //   redo: false,
+      // });
+
+      // Navigate back if needed
 
       // POP FROM STACK: Check if we have a history to return to
       if (navigationStack.length > 0) {

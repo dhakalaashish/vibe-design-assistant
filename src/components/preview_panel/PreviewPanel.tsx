@@ -18,6 +18,7 @@ import { Console } from "./Console";
 import { useRunApp } from "@/hooks/useRunApp";
 import { PublishPanel } from "./PublishPanel";
 import { SecurityPanel } from "./SecurityPanel";
+import { AutoBuildPanel } from "./AutoBuildPanel";
 
 interface ConsoleHeaderProps {
   isOpen: boolean;
@@ -117,6 +118,8 @@ export function PreviewPanel() {
                 <PreviewIframe key={key} loading={loading} />
               ) : previewMode === "design" ? (
                 <DesignView loading={loading} app={app} />
+              ) : previewMode === "auto-build" ? (
+                <AutoBuildPanel />
               ) : previewMode === "code" ? (
                 <CodeView loading={loading} app={app} />
               ) : previewMode === "configure" ? (
