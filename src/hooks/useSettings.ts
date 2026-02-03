@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAtom } from "jotai";
 import { userSettingsAtom, envVarsAtom } from "@/atoms/appAtoms";
-import { IpcClient } from "@/ipc/ipc_client";
-import { type UserSettings } from "@/lib/schemas";
+import { ipc } from "@/ipc/types";
+import { type UserSettings, hasDyadProKey } from "@/lib/schemas";
 import { usePostHog } from "posthog-js/react";
 import { useAppVersion } from "./useAppVersion";
 
@@ -29,16 +29,17 @@ export function useSettings() {
   const loadInitialData = useCallback(async () => {
     setLoading(true);
     try {
-      const ipcClient = IpcClient.getInstance();
       // Fetch settings and env vars concurrently
       const [userSettings, fetchedEnvVars] = await Promise.all([
-        ipcClient.getUserSettings(),
-        ipcClient.getEnvVars(),
+        ipc.settings.getUserSettings(),
+        ipc.misc.getEnvVars(),
       ]);
       processSettingsForTelemetry(userSettings);
+      const isPro = hasDyadProKey(userSettings);
+      posthog.people.set({ isPro });
       if (!isInitialLoad && appVersion) {
         posthog.capture("app:initial-load", {
-          isPro: Boolean(userSettings.providerSettings?.auto?.apiKey?.value),
+          isPro,
           appVersion,
         });
         isInitialLoad = true;
@@ -62,10 +63,10 @@ export function useSettings() {
   const updateSettings = async (newSettings: Partial<UserSettings>) => {
     setLoading(true);
     try {
-      const ipcClient = IpcClient.getInstance();
-      const updatedSettings = await ipcClient.setUserSettings(newSettings);
+      const updatedSettings = await ipc.settings.setUserSettings(newSettings);
       setSettingsAtom(updatedSettings);
       processSettingsForTelemetry(updatedSettings);
+      posthog.people.set({ isPro: hasDyadProKey(updatedSettings) });
 
       setError(null);
       return updatedSettings;

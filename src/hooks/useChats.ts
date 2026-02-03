@@ -1,42 +1,27 @@
-import { useAtom } from "jotai";
-import { useEffect } from "react";
-import { chatsAtom, chatsLoadingAtom } from "@/atoms/chatAtoms";
-import { getAllChats } from "@/lib/chat";
+import { ipc } from "@/ipc/types";
 import type { ChatSummary } from "@/lib/schemas";
+import { queryKeys } from "@/lib/queryKeys";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export function useChats(appId: number | null) {
-  const [chats, setChats] = useAtom(chatsAtom);
-  const [loading, setLoading] = useAtom(chatsLoadingAtom);
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    const fetchChats = async () => {
-      try {
-        setLoading(true);
-        const chatList = await getAllChats(appId || undefined);
-        setChats(chatList);
-      } catch (error) {
-        console.error("Failed to load chats:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const { data, isLoading } = useQuery<ChatSummary[]>({
+    queryKey: queryKeys.chats.list({ appId }),
+    queryFn: async () => {
+      return ipc.chat.getChats(appId ?? undefined);
+    },
+  });
 
-    fetchChats();
-  }, [appId, setChats, setLoading]);
-
-  const refreshChats = async () => {
-    try {
-      setLoading(true);
-      const chatList = await getAllChats(appId || undefined);
-      setChats(chatList);
-      return chatList;
-    } catch (error) {
-      console.error("Failed to refresh chats:", error);
-      return [] as ChatSummary[];
-    } finally {
-      setLoading(false);
-    }
+  const invalidateChats = () => {
+    // Invalidate all chat queries (any appId) since mutations affect both
+    // app-specific lists and the global list (appId=null)
+    queryClient.invalidateQueries({ queryKey: queryKeys.chats.all });
   };
 
-  return { chats, loading, refreshChats };
+  return {
+    chats: data ?? [],
+    loading: isLoading,
+    invalidateChats,
+  };
 }

@@ -7,8 +7,11 @@ import { useAtom } from "jotai";
 import { selectedChatIdAtom } from "@/atoms/chatAtoms";
 import { selectedAppIdAtom } from "@/atoms/appAtoms";
 import { dropdownOpenAtom } from "@/atoms/uiAtoms";
-import { IpcClient } from "@/ipc/ipc_client";
+import { ipc } from "@/ipc/types";
 import { showError, showSuccess } from "@/lib/toast";
+import { useSettings } from "@/hooks/useSettings";
+import { getEffectiveDefaultChatMode } from "@/lib/schemas";
+import { useFreeAgentQuota } from "@/hooks/useFreeAgentQuota";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -35,8 +38,10 @@ export function ChatList({ show }: { show?: boolean }) {
   const [selectedChatId, setSelectedChatId] = useAtom(selectedChatIdAtom);
   const [selectedAppId] = useAtom(selectedAppIdAtom);
   const [, setIsDropdownOpen] = useAtom(dropdownOpenAtom);
+  const { settings, updateSettings, envVars } = useSettings();
+  const { isQuotaExceeded, isLoading: isQuotaLoading } = useFreeAgentQuota();
 
-  const { chats, loading, refreshChats } = useChats(selectedAppId);
+  const { chats, loading, invalidateChats } = useChats(selectedAppId);
   const routerState = useRouterState();
   const isChatRoute = routerState.location.pathname === "/chat";
 
@@ -85,7 +90,19 @@ export function ChatList({ show }: { show?: boolean }) {
     if (selectedAppId) {
       try {
         // Create a new chat with an empty title for now
-        const chatId = await IpcClient.getInstance().createChat(selectedAppId);
+        const chatId = await ipc.chat.createChat(selectedAppId);
+
+        // Set the default chat mode for the new chat
+        // Only consider quota available if it has finished loading and is not exceeded
+        if (settings) {
+          const freeAgentQuotaAvailable = !isQuotaLoading && !isQuotaExceeded;
+          const effectiveDefaultMode = getEffectiveDefaultChatMode(
+            settings,
+            envVars,
+            freeAgentQuotaAvailable,
+          );
+          updateSettings({ selectedChatMode: effectiveDefaultMode });
+        }
 
         // Navigate to the new chat
         setSelectedChatId(chatId);
@@ -95,7 +112,7 @@ export function ChatList({ show }: { show?: boolean }) {
         });
 
         // Refresh the chat list
-        await refreshChats();
+        await invalidateChats();
       } catch (error) {
         // DO A TOAST
         showError(`Failed to create new chat: ${(error as any).toString()}`);
@@ -108,7 +125,7 @@ export function ChatList({ show }: { show?: boolean }) {
 
   const handleDeleteChat = async (chatId: number) => {
     try {
-      await IpcClient.getInstance().deleteChat(chatId);
+      await ipc.chat.deleteChat(chatId);
       showSuccess("Chat deleted successfully");
 
       // If the deleted chat was selected, navigate to home
@@ -118,7 +135,7 @@ export function ChatList({ show }: { show?: boolean }) {
       }
 
       // Refresh the chat list
-      await refreshChats();
+      await invalidateChats();
     } catch (error) {
       showError(`Failed to delete chat: ${(error as any).toString()}`);
     }
@@ -278,7 +295,7 @@ export function ChatList({ show }: { show?: boolean }) {
           currentTitle={renameChatTitle}
           isOpen={isRenameDialogOpen}
           onOpenChange={handleRenameDialogClose}
-          onRename={refreshChats}
+          onRename={invalidateChats}
         />
       )}
 

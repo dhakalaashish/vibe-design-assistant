@@ -1,15 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
-import { IpcClient } from "@/ipc/ipc_client";
+import { ipc } from "@/ipc/types";
 import { localTemplatesData, type Template } from "@/shared/templates";
+import { queryKeys } from "@/lib/queryKeys";
 
 export function useTemplates() {
   const query = useQuery({
-    queryKey: ["templates"],
+    queryKey: queryKeys.templates.all,
     queryFn: async (): Promise<Template[]> => {
-      const ipcClient = IpcClient.getInstance();
-      return ipcClient.getTemplates();
+      return ipc.template.getTemplates();
     },
-    initialData: localTemplatesData,
+    placeholderData: localTemplatesData,
     meta: {
       showErrorToast: true,
     },

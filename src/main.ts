@@ -24,6 +24,14 @@ import {
   AddPromptDataSchema,
   AddPromptPayload,
 } from "./ipc/deep_link_data";
+import {
+  startPerformanceMonitoring,
+  stopPerformanceMonitoring,
+} from "./utils/performance_monitor";
+import { cleanupOldAiMessagesJson } from "./pro/main/ipc/handlers/local_agent/ai_messages_cleanup";
+import fs from "fs";
+import { gitAddSafeDirectory } from "./ipc/utils/git_utils";
+import { getDyadAppsBaseDirectory } from "./paths/paths";
 
 log.errorHandler.startCatching();
 log.eventLogger.startLogging();
@@ -40,6 +48,22 @@ registerIpcHandlers();
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();
+}
+
+// Decide the git directory depending on environment
+function resolveLocalGitDirectory() {
+  if (!app.isPackaged) {
+    // Dev: app.getAppPath() is the project root
+    return path.join(app.getAppPath(), "node_modules/dugite/git");
+  }
+
+  // Packaged app: git is bundled via extraResource
+  return path.join(process.resourcesPath, "git");
+}
+
+const gitDir = resolveLocalGitDirectory();
+if (fs.existsSync(gitDir)) {
+  process.env.LOCAL_GIT_DIRECTORY = gitDir;
 }
 
 // https://www.electronjs.org/docs/latest/tutorial/launch-app-from-url-in-another-app#main-process-mainjs
@@ -64,9 +88,41 @@ export async function onReady() {
     logger.error("Error initializing backup manager", e);
   }
   initializeDatabase();
+
+  // Cleanup old ai_messages_json entries to prevent database bloat
+  cleanupOldAiMessagesJson();
+
   const settings = readSettings();
+
+  // Add dyad-apps directory to git safe.directory (required for Windows).
+  // The trailing /* allows access to all repositories under the named directory.
+  // See: https://git-scm.com/docs/git-config#Documentation/git-config.txt-safedirectory
+  if (settings.enableNativeGit) {
+    // Don't need to await because this only needs to run before
+    // the user starts interacting with Dyad app and uses a git-related feature.
+    gitAddSafeDirectory(`${getDyadAppsBaseDirectory()}/*`);
+  }
+
+  // Check if app was force-closed
+  if (settings.isRunning) {
+    logger.warn("App was force-closed on previous run");
+
+    // Store performance data to send after window is created
+    if (settings.lastKnownPerformance) {
+      logger.warn("Last known performance:", settings.lastKnownPerformance);
+      pendingForceCloseData = settings.lastKnownPerformance;
+    }
+  }
+
+  // Set isRunning to true at startup
+  writeSettings({ isRunning: true });
+
+  // Start performance monitoring
+  startPerformanceMonitoring();
+
   await onFirstRunMaybe(settings);
   createWindow();
+  createApplicationMenu();
 
   logger.info("Auto-update enabled=", settings.enableAutoUpdate);
   if (settings.enableAutoUpdate) {
@@ -134,6 +190,7 @@ declare global {
 }
 
 let mainWindow: BrowserWindow | null = null;
+let pendingForceCloseData: any = null;
 
 const createWindow = () => {
   // Create the browser window.
@@ -154,6 +211,7 @@ const createWindow = () => {
       preload: path.join(__dirname, "preload.js"),
       // transparent: true,
     },
+    icon: path.join(app.getAppPath(), "assets/icon/logo.png"),
     // backgroundColor: "#00000001",
     // frame: false,
   });
@@ -168,6 +226,16 @@ const createWindow = () => {
   if (process.env.NODE_ENV === "development") {
     // Open the DevTools.
     mainWindow.webContents.openDevTools();
+  }
+
+  // Send force-close event if it was detected
+  if (pendingForceCloseData) {
+    mainWindow.webContents.once("did-finish-load", () => {
+      mainWindow?.webContents.send("force-close-detected", {
+        performanceData: pendingForceCloseData,
+      });
+      pendingForceCloseData = null;
+    });
   }
 
   // Enable native context menu on right-click
@@ -231,6 +299,87 @@ const createWindow = () => {
   });
 };
 
+/**
+ * Create application menu with Edit shortcuts (Undo, Redo, Cut, Copy, Paste, etc.)
+ * This enables standard keyboard shortcuts like Cmd/Ctrl+C, Cmd/Ctrl+V, etc.
+ */
+const createApplicationMenu = () => {
+  const isMac = process.platform === "darwin";
+
+  const template: Electron.MenuItemConstructorOptions[] = [
+    // App menu (macOS only)
+    ...(isMac
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              { role: "about" as const },
+              { type: "separator" as const },
+              { role: "services" as const },
+              { type: "separator" as const },
+              { role: "hide" as const },
+              { role: "hideOthers" as const },
+              { role: "unhide" as const },
+              { type: "separator" as const },
+              { role: "quit" as const },
+            ],
+          },
+        ]
+      : []),
+    // Edit menu - enables keyboard shortcuts for clipboard operations
+    {
+      label: "Edit",
+      submenu: [
+        { role: "undo" as const },
+        { role: "redo" as const },
+        { type: "separator" as const },
+        { role: "cut" as const },
+        { role: "copy" as const },
+        { role: "paste" as const },
+        { role: "delete" as const },
+        { type: "separator" as const },
+        { role: "selectAll" as const },
+      ],
+    },
+    // View menu
+    {
+      label: "View",
+      submenu: [
+        { role: "reload" as const },
+        { role: "forceReload" as const },
+        ...(process.env.NODE_ENV === "development"
+          ? [{ role: "toggleDevTools" as const }]
+          : []),
+        { type: "separator" as const },
+        { role: "resetZoom" as const },
+        { role: "zoomIn" as const },
+        { role: "zoomOut" as const },
+        { type: "separator" as const },
+        { role: "togglefullscreen" as const },
+      ],
+    },
+    // Window menu
+    {
+      label: "Window",
+      submenu: [
+        { role: "minimize" as const },
+        { role: "zoom" as const },
+        ...(isMac
+          ? [
+              { type: "separator" as const },
+              { role: "front" as const },
+              { type: "separator" as const },
+              { role: "window" as const },
+            ]
+          : [{ role: "close" as const }]),
+      ],
+    },
+  ];
+
+  const appMenu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(appMenu);
+};
+
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
@@ -253,7 +402,7 @@ app.on("open-url", (event, url) => {
   handleDeepLinkReturn(url);
 });
 
-function handleDeepLinkReturn(url: string) {
+async function handleDeepLinkReturn(url: string) {
   // example url: "dyad://supabase-oauth-return?token=a&refreshToken=b"
   let parsed: URL;
   try {
@@ -306,7 +455,7 @@ function handleDeepLinkReturn(url: string) {
       );
       return;
     }
-    handleSupabaseOAuthReturn({ token, refreshToken, expiresIn });
+    await handleSupabaseOAuthReturn({ token, refreshToken, expiresIn });
     // Send message to renderer to trigger re-render
     mainWindow?.webContents.send("deep-link-received", {
       type: parsed.hostname,
@@ -395,6 +544,16 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
   }
+});
+
+// Only set isRunning to false when the app is properly quit by the user
+app.on("will-quit", () => {
+  logger.info("App is quitting, setting isRunning to false");
+
+  // Stop performance monitoring and capture final metrics
+  stopPerformanceMonitoring();
+
+  writeSettings({ isRunning: false });
 });
 
 app.on("activate", () => {

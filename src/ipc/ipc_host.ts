@@ -5,6 +5,7 @@ import { registerSettingsHandlers } from "./handlers/settings_handlers";
 import { registerShellHandlers } from "./handlers/shell_handler";
 import { registerDependencyHandlers } from "./handlers/dependency_handlers";
 import { registerGithubHandlers } from "./handlers/github_handlers";
+import { registerGithubBranchHandlers } from "./handlers/git_branch_handlers";
 import { registerVercelHandlers } from "./handlers/vercel_handlers";
 import { registerNodeHandlers } from "./handlers/node_handlers";
 import { registerProposalHandlers } from "./handlers/proposal_handlers";
@@ -27,11 +28,15 @@ import { registerCapacitorHandlers } from "./handlers/capacitor_handlers";
 import { registerProblemsHandlers } from "./handlers/problems_handlers";
 import { registerAppEnvVarsHandlers } from "./handlers/app_env_vars_handlers";
 import { registerTemplateHandlers } from "./handlers/template_handlers";
+import { registerThemesHandlers } from "../pro/main/ipc/handlers/themes_handlers";
 import { registerPortalHandlers } from "./handlers/portal_handlers";
 import { registerPromptHandlers } from "./handlers/prompt_handlers";
 import { registerHelpBotHandlers } from "./handlers/help_bot_handlers";
 import { registerMcpHandlers } from "./handlers/mcp_handlers";
 import { registerSecurityHandlers } from "./handlers/security_handlers";
+import { registerVisualEditingHandlers } from "../pro/main/ipc/handlers/visual_editing_handlers";
+import { registerAgentToolHandlers } from "../pro/main/ipc/handlers/local_agent/agent_tool_handlers";
+import { registerFreeAgentQuotaHandlers } from "./handlers/free_agent_quota_handlers";
 
 export function registerIpcHandlers() {
   // Register all IPC handlers by category
@@ -42,6 +47,7 @@ export function registerIpcHandlers() {
   registerShellHandlers();
   registerDependencyHandlers();
   registerGithubHandlers();
+  registerGithubBranchHandlers();
   registerVercelHandlers();
   registerNodeHandlers();
   registerProblemsHandlers();
@@ -64,9 +70,13 @@ export function registerIpcHandlers() {
   registerCapacitorHandlers();
   registerAppEnvVarsHandlers();
   registerTemplateHandlers();
+  registerThemesHandlers();
   registerPortalHandlers();
   registerPromptHandlers();
   registerHelpBotHandlers();
   registerMcpHandlers();
   registerSecurityHandlers();
+  registerVisualEditingHandlers();
+  registerAgentToolHandlers();
+  registerFreeAgentQuotaHandlers();
 }

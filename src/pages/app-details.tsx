@@ -1,11 +1,8 @@
 import { useNavigate, useRouter, useSearch } from "@tanstack/react-router";
-import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import {
-  appBasePathAtom,
-  appsListAtom,
-  selectedAppIdAtom,
-} from "@/atoms/appAtoms";
-import { IpcClient } from "@/ipc/ipc_client";
+import { normalizePath } from "../../shared/normalizePath";
+import { useAtom, useSetAtom } from "jotai";
+import { appsListAtom, selectedAppIdAtom } from "@/atoms/appAtoms";
+import { ipc } from "@/ipc/types";
 import { useLoadApps } from "@/hooks/useLoadApps";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -32,7 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { GitHubConnector } from "@/components/GitHubConnector";
 import { SupabaseConnector } from "@/components/SupabaseConnector";
-import { showError } from "@/lib/toast";
+import { showError, showSuccess } from "@/lib/toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
@@ -41,6 +38,7 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { useCheckName } from "@/hooks/useCheckName";
 import { AppUpgrades } from "@/components/AppUpgrades";
 import { CapacitorControls } from "@/components/CapacitorControls";
+import { GithubCollaboratorManager } from "@/components/GithubCollaboratorManager";
 
 export default function AppDetailsPage() {
   const navigate = useNavigate();
@@ -59,10 +57,11 @@ export default function AppDetailsPage() {
     useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [isRenamingFolder, setIsRenamingFolder] = useState(false);
-  const appBasePath = useAtomValue(appBasePathAtom);
 
   const [isCopyDialogOpen, setIsCopyDialogOpen] = useState(false);
   const [newCopyAppName, setNewCopyAppName] = useState("");
+  const [isChangeLocationDialogOpen, setIsChangeLocationDialogOpen] =
+    useState(false);
 
   const queryClient = useQueryClient();
   const setSelectedAppId = useSetAtom(selectedAppIdAtom);
@@ -82,7 +81,7 @@ export default function AppDetailsPage() {
 
     try {
       setIsDeleting(true);
-      await IpcClient.getInstance().deleteApp(appId);
+      await ipc.app.deleteApp({ appId });
       setIsDeleteDialogOpen(false);
       await refreshApps();
       navigate({ to: "/", search: {} });
@@ -103,7 +102,9 @@ export default function AppDetailsPage() {
 
   const handleOpenRenameFolderDialog = () => {
     if (selectedApp) {
-      setNewFolderName(selectedApp.path.split("/").pop() || selectedApp.path);
+      setNewFolderName(
+        normalizePath(selectedApp.path).split("/").pop() || selectedApp.path,
+      );
       setIsRenameFolderDialogOpen(true);
     }
   };
@@ -117,7 +118,7 @@ export default function AppDetailsPage() {
       // Determine the new path based on user's choice
       const appPath = renameFolder ? newAppName : selectedApp.path;
 
-      await IpcClient.getInstance().renameApp({
+      await ipc.app.renameApp({
         appId,
         appName: newAppName,
         appPath,
@@ -142,7 +143,7 @@ export default function AppDetailsPage() {
 
     try {
       setIsRenamingFolder(true);
-      await IpcClient.getInstance().renameApp({
+      await ipc.app.renameApp({
         appId,
         appName: selectedApp.name, // Keep the app name the same
         appPath: newFolderName, // Change only the folder path
@@ -172,12 +173,41 @@ export default function AppDetailsPage() {
     }
   };
 
+  const handleChangeLocation = async () => {
+    if (!selectedApp || !appId) return;
+
+    try {
+      // Get the current parent directory as default
+      const currentPath = selectedApp.resolvedPath || "";
+      const currentParentDir = currentPath
+        ? currentPath.replace(/[/\\][^/\\]*$/, "") // Remove last path component
+        : undefined;
+
+      const response = await ipc.app.selectAppLocation({
+        defaultPath: currentParentDir,
+      });
+      if (!response.canceled && response.path) {
+        await changeLocationMutation.mutateAsync({
+          appId,
+          parentDirectory: response.path,
+        });
+        setIsChangeLocationDialogOpen(false);
+      } else {
+        // User canceled the file dialog, close the change location dialog
+        setIsChangeLocationDialogOpen(false);
+      }
+    } catch {
+      // Error is already shown by the mutation's onError
+      setIsChangeLocationDialogOpen(false);
+    }
+  };
+
   const copyAppMutation = useMutation({
     mutationFn: async ({ withHistory }: { withHistory: boolean }) => {
       if (!appId || !newCopyAppName.trim()) {
         throw new Error("Invalid app ID or name for copying.");
       }
-      return IpcClient.getInstance().copyApp({
+      return ipc.app.copyApp({
         appId,
         newAppName: newCopyAppName,
         withHistory,
@@ -188,9 +218,23 @@ export default function AppDetailsPage() {
       setSelectedAppId(appId);
       await invalidateAppQuery(queryClient, { appId });
       await refreshApps();
-      await IpcClient.getInstance().createChat(appId);
+      await ipc.chat.createChat(appId);
       setIsCopyDialogOpen(false);
       navigate({ to: "/app-details", search: { appId } });
+    },
+    onError: (error) => {
+      showError(error);
+    },
+  });
+
+  const changeLocationMutation = useMutation({
+    mutationFn: async (params: { appId: number; parentDirectory: string }) => {
+      return ipc.app.changeAppLocation(params);
+    },
+    onSuccess: async () => {
+      await invalidateAppQuery(queryClient, { appId });
+      await refreshApps();
+      showSuccess("App location updated");
     },
     onError: (error) => {
       showError(error);
@@ -216,7 +260,7 @@ export default function AppDetailsPage() {
     );
   }
 
-  const fullAppPath = appBasePath.replace("$APP_BASE_PATH", selectedApp.path);
+  const currentAppPath = selectedApp.resolvedPath || "";
 
   return (
     <div
@@ -271,6 +315,14 @@ export default function AppDetailsPage() {
                   Rename folder
                 </Button>
                 <Button
+                  onClick={() => setIsChangeLocationDialogOpen(true)}
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 justify-start text-xs"
+                >
+                  Move folder
+                </Button>
+                <Button
                   onClick={handleOpenCopyDialog}
                   variant="ghost"
                   size="sm"
@@ -309,18 +361,18 @@ export default function AppDetailsPage() {
               Path
             </span>
             <div className="flex items-center gap-1">
-              <span className="text-sm break-all">{fullAppPath}</span>
               <Button
                 variant="ghost"
-                size="sm"
-                className="p-0.5 h-auto cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                size="icon"
+                className="ml-[-8px] p-0.5 h-auto cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                 onClick={() => {
-                  IpcClient.getInstance().showItemInFolder(fullAppPath);
+                  ipc.system.showItemInFolder(currentAppPath);
                 }}
                 title="Show in folder"
               >
                 <Folder className="h-3.5 w-3.5" />
               </Button>
+              <span className="text-sm break-all">{currentAppPath}</span>
             </div>
           </div>
         </div>
@@ -341,6 +393,11 @@ export default function AppDetailsPage() {
           </Button>
           <div className="border border-gray-200 rounded-md p-4">
             <GitHubConnector appId={appId} folderName={selectedApp.path} />
+            {selectedApp.githubOrg && selectedApp.githubRepo && appId && (
+              <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
+                <GithubCollaboratorManager appId={appId} />
+              </div>
+            )}
           </div>
           {appId && <SupabaseConnector appId={appId} />}
           {appId && <CapacitorControls appId={appId} />}
@@ -625,6 +682,46 @@ export default function AppDetailsPage() {
             </DialogContent>
           </Dialog>
         )}
+
+        {/* Change Location Dialog */}
+        <Dialog
+          open={isChangeLocationDialogOpen}
+          onOpenChange={setIsChangeLocationDialogOpen}
+        >
+          <DialogContent className="max-w-sm p-4">
+            <DialogHeader className="pb-2">
+              <DialogTitle>Change App Location</DialogTitle>
+              <DialogDescription className="text-xs">
+                Select a folder where this app will be stored. The app folder
+                name will remain the same.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setIsChangeLocationDialogOpen(false)}
+                disabled={changeLocationMutation.isPending}
+                size="sm"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleChangeLocation}
+                disabled={changeLocationMutation.isPending}
+                size="sm"
+              >
+                {changeLocationMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Moving...
+                  </>
+                ) : (
+                  "Select Folder"
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Delete Confirmation Dialog */}
         <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>

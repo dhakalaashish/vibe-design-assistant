@@ -1,6 +1,6 @@
 import { createLoggedHandler } from "./safe_handle";
 import log from "electron-log";
-import { AppUpgrade } from "../ipc_types";
+import { AppUpgrade } from "@/ipc/types";
 import { db } from "../../db";
 import { apps } from "../../db/schema";
 import { eq } from "drizzle-orm";
@@ -205,7 +205,7 @@ async function applyCapacitor({
   // Install Capacitor dependencies
   await simpleSpawn({
     command:
-      "pnpm add @capacitor/core @capacitor/cli @capacitor/ios @capacitor/android || npm install @capacitor/core @capacitor/cli @capacitor/ios @capacitor/android --legacy-peer-deps",
+      "pnpm add @capacitor/core@7.4.4 @capacitor/cli@7.4.4 @capacitor/ios@7.4.4 @capacitor/android@7.4.4 || npm install @capacitor/core@7.4.4 @capacitor/cli@7.4.4 @capacitor/ios@7.4.4 @capacitor/android@7.4.4 --legacy-peer-deps",
     cwd: appPath,
     successMessage: "Capacitor dependencies installed successfully",
     errorPrefix: "Failed to install Capacitor dependencies",

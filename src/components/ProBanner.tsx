@@ -4,29 +4,25 @@ import openAiLogo from "../../assets/ai-logos/openai-logo.svg";
 import googleLogo from "../../assets/ai-logos/google-logo.svg";
 // @ts-ignore
 import anthropicLogo from "../../assets/ai-logos/anthropic-logo.svg";
-import { IpcClient } from "@/ipc/ipc_client";
+import { ipc } from "@/ipc/types";
 import { useState } from "react";
-import { KeyRound } from "lucide-react";
+import { ArrowUpRight, KeyRound, Wallet } from "lucide-react";
 
-import { useSettings } from "@/hooks/useSettings";
-import { useUserBudgetInfo } from "@/hooks/useUserBudgetInfo";
 import { Button } from "./ui/button";
+import { cn } from "@/lib/utils";
+import { hasDyadProKey } from "@/lib/schemas";
+import { useSettings } from "@/hooks/useSettings";
 
 export function ProBanner() {
   const { settings } = useSettings();
-  const { userBudget } = useUserBudgetInfo();
 
   const [selectedBanner] = useState<"ai" | "smart" | "turbo">(() => {
     const options = ["ai", "smart", "turbo"] as const;
     return options[Math.floor(Math.random() * options.length)];
   });
 
-  if (settings?.enableDyadPro || userBudget) {
-    return (
-      <div className="mt-6 max-w-2xl mx-auto">
-        <ManageDyadProButton />
-      </div>
-    );
+  if (settings && hasDyadProKey(settings)) {
+    return null;
   }
 
   return (
@@ -38,25 +34,26 @@ export function ProBanner() {
       ) : (
         <TurboBanner />
       )}
-      <SetupDyadProButton />
     </div>
   );
 }
 
-export function ManageDyadProButton() {
+export function ManageDyadProButton({ className }: { className?: string }) {
   return (
     <Button
       variant="outline"
       size="lg"
-      className="w-full mt-4 bg-(--background-lighter) text-primary"
+      className={cn(
+        "cursor-pointer w-full mt-4 bg-(--background-lighter) text-primary",
+        className,
+      )}
       onClick={() => {
-        IpcClient.getInstance().openExternalUrl(
-          "https://academy.dyad.sh/subscription",
-        );
+        ipc.system.openExternalUrl("https://academy.dyad.sh/subscription");
       }}
     >
-      <KeyRound aria-hidden="true" />
-      Manage Dyad Pro subscription
+      <Wallet aria-hidden="true" className="w-5 h-5" />
+      Manage Dyad Pro
+      <ArrowUpRight aria-hidden="true" className="w-5 h-5" />
     </Button>
   );
 }
@@ -66,11 +63,9 @@ export function SetupDyadProButton() {
     <Button
       variant="outline"
       size="lg"
-      className="w-full mt-4 bg-(--background-lighter) text-primary"
+      className="cursor-pointer w-full bg-(--background-lighter) text-primary"
       onClick={() => {
-        IpcClient.getInstance().openExternalUrl(
-          "https://academy.dyad.sh/settings",
-        );
+        ipc.system.openExternalUrl("https://academy.dyad.sh/settings");
       }}
     >
       <KeyRound aria-hidden="true" />
@@ -84,7 +79,7 @@ export function AiAccessBanner() {
     <div
       className="w-full py-2 sm:py-2.5 md:py-3 rounded-lg bg-gradient-to-br from-white via-indigo-50 to-sky-100 dark:from-indigo-700 dark:via-indigo-700 dark:to-indigo-900 flex items-center justify-center relative overflow-hidden ring-1 ring-inset ring-black/5 dark:ring-white/10 shadow-sm cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-[1px]"
       onClick={() => {
-        IpcClient.getInstance().openExternalUrl(
+        ipc.system.openExternalUrl(
           "https://www.dyad.sh/pro?utm_source=dyad-app&utm_medium=app&utm_campaign=in-app-banner-ai-access",
         );
       }}
@@ -150,7 +145,7 @@ export function SmartContextBanner() {
     <div
       className="w-full py-2 sm:py-2.5 md:py-3 rounded-lg bg-gradient-to-br from-emerald-50 via-emerald-100 to-emerald-200 dark:from-emerald-700 dark:via-emerald-700 dark:to-emerald-900 flex items-center justify-center relative overflow-hidden ring-1 ring-inset ring-emerald-900/10 dark:ring-white/10 shadow-sm cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-[1px]"
       onClick={() => {
-        IpcClient.getInstance().openExternalUrl(
+        ipc.system.openExternalUrl(
           "https://www.dyad.sh/pro?utm_source=dyad-app&utm_medium=app&utm_campaign=in-app-banner-smart-context",
         );
       }}
@@ -167,7 +162,7 @@ export function SmartContextBanner() {
         <div className="mt-0.5 sm:mt-1 flex items-center gap-2 sm:gap-3 justify-center">
           <div className="flex flex-col items-center text-center">
             <div className="text-xl font-semibold tracking-tight text-emerald-900 dark:text-emerald-100">
-              Up to 5x cheaper
+              Up to 3x cheaper
             </div>
             <div className="text-sm sm:text-base mt-1 text-emerald-700 dark:text-emerald-200/80">
               by using Smart Context
@@ -191,7 +186,7 @@ export function TurboBanner() {
     <div
       className="w-full py-2 sm:py-2.5 md:py-3 rounded-lg bg-gradient-to-br from-rose-50 via-rose-100 to-rose-200 dark:from-rose-800 dark:via-fuchsia-800 dark:to-rose-800 flex items-center justify-center relative overflow-hidden ring-1 ring-inset ring-rose-900/10 dark:ring-white/5 shadow-sm cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-[1px]"
       onClick={() => {
-        IpcClient.getInstance().openExternalUrl(
+        ipc.system.openExternalUrl(
           "https://www.dyad.sh/pro?utm_source=dyad-app&utm_medium=app&utm_campaign=in-app-banner-turbo",
         );
       }}

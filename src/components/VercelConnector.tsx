@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Globe } from "lucide-react";
-import { IpcClient } from "@/ipc/ipc_client";
+import { ipc, App } from "@/ipc/types";
 import { useSettings } from "@/hooks/useSettings";
 import { useLoadApp } from "@/hooks/useLoadApp";
 import { useVercelDeployments } from "@/hooks/useVercelDeployments";
@@ -15,7 +15,6 @@ import {
 import {} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { App } from "@/ipc/ipc_types";
 
 interface VercelConnectorProps {
   appId: number | null;
@@ -25,7 +24,7 @@ interface VercelConnectorProps {
 interface VercelProject {
   id: string;
   name: string;
-  framework: string | null;
+  framework?: string | null;
 }
 
 interface ConnectedVercelConnectorProps {
@@ -47,15 +46,30 @@ function ConnectedVercelConnector({
   app,
   refreshApp,
 }: ConnectedVercelConnectorProps) {
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const {
     deployments,
     isLoading: isLoadingDeployments,
     error: deploymentsError,
-    getDeployments: handleGetDeployments,
+    getDeployments,
     disconnectProject,
     isDisconnecting,
     disconnectError,
   } = useVercelDeployments(appId);
+
+  const handleGetDeployments = async () => {
+    setIsRefreshing(true);
+    try {
+      const minLoadingTime = new Promise((resolve) => setTimeout(resolve, 750));
+      await Promise.all([getDeployments(), minLoadingTime]);
+      // Refresh app data to get the updated deployment URL
+      refreshApp();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const isLoadingOrRefreshing = isLoadingDeployments || isRefreshing;
 
   const handleDisconnectProject = async () => {
     await disconnectProject();
@@ -73,7 +87,7 @@ function ConnectedVercelConnector({
       <a
         onClick={(e) => {
           e.preventDefault();
-          IpcClient.getInstance().openExternalUrl(
+          ipc.system.openExternalUrl(
             `https://vercel.com/${app.vercelTeamSlug}/${app.vercelProjectName}`,
           );
         }}
@@ -91,9 +105,7 @@ function ConnectedVercelConnector({
               onClick={(e) => {
                 e.preventDefault();
                 if (app.vercelDeploymentUrl) {
-                  IpcClient.getInstance().openExternalUrl(
-                    app.vercelDeploymentUrl,
-                  );
+                  ipc.system.openExternalUrl(app.vercelDeploymentUrl);
                 }
               }}
               className="cursor-pointer text-blue-600 hover:underline dark:text-blue-400 font-mono"
@@ -106,8 +118,8 @@ function ConnectedVercelConnector({
         </div>
       )}
       <div className="mt-2 flex gap-2">
-        <Button onClick={handleGetDeployments} disabled={isLoadingDeployments}>
-          {isLoadingDeployments ? (
+        <Button onClick={handleGetDeployments} disabled={isLoadingOrRefreshing}>
+          {isLoadingOrRefreshing ? (
             <>
               <svg
                 className="animate-spin h-5 w-5 mr-2 inline"
@@ -130,7 +142,7 @@ function ConnectedVercelConnector({
                   d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                 ></path>
               </svg>
-              Getting Deployments...
+              Refreshing...
             </>
           ) : (
             "Refresh Deployments"
@@ -178,9 +190,7 @@ function ConnectedVercelConnector({
                   <a
                     onClick={(e) => {
                       e.preventDefault();
-                      IpcClient.getInstance().openExternalUrl(
-                        `https://${deployment.url}`,
-                      );
+                      ipc.system.openExternalUrl(`https://${deployment.url}`);
                     }}
                     className="cursor-pointer text-blue-600 hover:underline dark:text-blue-400 text-sm"
                     target="_blank"
@@ -262,7 +272,7 @@ function UnconnectedVercelConnector({
   const loadAvailableProjects = async () => {
     setIsLoadingProjects(true);
     try {
-      const projects = await IpcClient.getInstance().listVercelProjects();
+      const projects = await ipc.vercel.listProjects();
       setAvailableProjects(projects);
     } catch (error) {
       console.error("Failed to load Vercel projects:", error);
@@ -280,7 +290,7 @@ function UnconnectedVercelConnector({
     setTokenSuccess(false);
 
     try {
-      await IpcClient.getInstance().saveVercelAccessToken({
+      await ipc.vercel.saveToken({
         token: accessToken.trim(),
       });
       setTokenSuccess(true);
@@ -299,7 +309,7 @@ function UnconnectedVercelConnector({
     if (!name) return;
     setIsCheckingProject(true);
     try {
-      const result = await IpcClient.getInstance().isVercelProjectAvailable({
+      const result = await ipc.vercel.isProjectAvailable({
         name,
       });
       setProjectAvailable(result.available);
@@ -337,12 +347,12 @@ function UnconnectedVercelConnector({
 
     try {
       if (projectSetupMode === "create") {
-        await IpcClient.getInstance().createVercelProject({
+        await ipc.vercel.createProject({
           name: projectName,
           appId,
         });
       } else {
-        await IpcClient.getInstance().connectToExistingVercelProject({
+        await ipc.vercel.connectExistingProject({
           projectId: selectedProject,
           appId,
         });
@@ -383,9 +393,7 @@ function UnconnectedVercelConnector({
               <div className="flex gap-2 mt-3">
                 <Button
                   onClick={() => {
-                    IpcClient.getInstance().openExternalUrl(
-                      "https://vercel.com/signup",
-                    );
+                    ipc.system.openExternalUrl("https://vercel.com/signup");
                   }}
                   variant="outline"
                   className="flex-1"
@@ -394,7 +402,7 @@ function UnconnectedVercelConnector({
                 </Button>
                 <Button
                   onClick={() => {
-                    IpcClient.getInstance().openExternalUrl(
+                    ipc.system.openExternalUrl(
                       "https://vercel.com/account/settings/tokens",
                     );
                   }}

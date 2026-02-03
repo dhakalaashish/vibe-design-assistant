@@ -4,7 +4,7 @@ import { useLoadAppFile } from "@/hooks/useLoadAppFile";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ChevronRight, Circle, Save } from "lucide-react";
 import "@/components/chat/monaco";
-import { IpcClient } from "@/ipc/ipc_client";
+import { ipc } from "@/ipc/types";
 import { showError, showSuccess, showWarning } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,10 +16,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useSettings } from "@/hooks/useSettings";
 import { useCheckProblems } from "@/hooks/useCheckProblems";
 import { getLanguage } from "@/utils/get_language";
+import { queryKeys } from "@/lib/queryKeys";
 
 interface FileEditorProps {
   appId: number | null;
   filePath: string;
+  initialLine?: number | null;
 }
 
 interface BreadcrumbProps {
@@ -86,7 +88,11 @@ const Breadcrumb: React.FC<BreadcrumbProps> = ({
   );
 };
 
-export const FileEditor = ({ appId, filePath }: FileEditorProps) => {
+export const FileEditor = ({
+  appId,
+  filePath,
+  initialLine = null,
+}: FileEditorProps) => {
   const { content, loading, error } = useLoadAppFile(appId, filePath);
   const { theme } = useTheme();
   const [value, setValue] = useState<string | undefined>(undefined);
@@ -127,9 +133,29 @@ export const FileEditor = ({ appId, filePath }: FileEditorProps) => {
       window.matchMedia("(prefers-color-scheme: dark)").matches);
   const editorTheme = isDarkMode ? "dyad-dark" : "dyad-light";
 
+  // Navigate to a specific line in the editor
+  const navigateToLine = React.useCallback((line: number | null) => {
+    if (line == null || !editorRef.current) {
+      return;
+    }
+    const lineNumber = Math.max(1, Math.floor(line));
+    const editor = editorRef.current;
+    const model = editor.getModel();
+    if (!model) return;
+    if (lineNumber > model.getLineCount()) return;
+
+    editor.revealLineInCenter(lineNumber);
+    editor.setPosition({ lineNumber, column: 1 });
+  }, []);
+
   // Handle editor mount
   const handleEditorDidMount: OnMount = (editor) => {
     editorRef.current = editor;
+
+    // Navigate to initialLine if provided (handles case when editor mounts after initialLine is set)
+    if (initialLine != null) {
+      navigateToLine(initialLine);
+    }
 
     // Listen for model content change events
     editor.onDidBlurEditorText(() => {
@@ -164,13 +190,14 @@ export const FileEditor = ({ appId, filePath }: FileEditorProps) => {
       isSavingRef.current = true;
       setIsSaving(true);
 
-      const ipcClient = IpcClient.getInstance();
-      const { warning } = await ipcClient.editAppFile(
+      const { warning } = await ipc.app.editAppFile({
         appId,
         filePath,
-        currentValueRef.current,
-      );
-      await queryClient.invalidateQueries({ queryKey: ["versions", appId] });
+        content: currentValueRef.current,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.versions.list({ appId }),
+      });
       if (settings?.enableAutoFixProblems) {
         checkProblems();
       }
@@ -190,6 +217,16 @@ export const FileEditor = ({ appId, filePath }: FileEditorProps) => {
       setIsSaving(false);
     }
   };
+
+  // Jump to target line if provided (e.g., from search results)
+  // This effect handles when initialLine changes after the editor is mounted
+  // Include content in dependencies to ensure navigation only occurs after file content is loaded
+  useEffect(() => {
+    // Only navigate if content is loaded (not null) to avoid navigating in old file content
+    if (content !== null) {
+      navigateToLine(initialLine ?? null);
+    }
+  }, [initialLine, filePath, content, navigateToLine]);
 
   if (loading) {
     return <div className="p-4">Loading file content...</div>;

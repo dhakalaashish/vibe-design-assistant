@@ -2,6 +2,7 @@ import path from "node:path";
 import fs from "node:fs";
 import log from "electron-log";
 import { TURBO_EDITS_V2_SYSTEM_PROMPT } from "../pro/main/prompts/turbo_edits_v2_prompt";
+import { constructLocalAgentPrompt } from "./local_agent_prompt";
 
 const logger = log.scope("system_prompt");
 
@@ -507,16 +508,41 @@ export const constructSystemPrompt = ({
   aiRules,
   chatMode = "build",
   enableTurboEditsV2,
+  themePrompt,
+  readOnly,
+  basicAgentMode,
 }: {
   aiRules: string | undefined;
-  chatMode?: "build" | "ask" | "agent";
+  chatMode?: "build" | "ask" | "agent" | "local-agent";
   enableTurboEditsV2: boolean;
+  themePrompt?: string;
+  /** If true, use read-only mode for local-agent (ask mode with tools) */
+  readOnly?: boolean;
+  /** If true, use basic agent mode (free tier with limited tools) */
+  basicAgentMode?: boolean;
 }) => {
-  const systemPrompt = getSystemPromptForChatMode({
+  if (chatMode === "local-agent") {
+    return constructLocalAgentPrompt(aiRules, themePrompt, {
+      readOnly,
+      basicAgentMode,
+    });
+  }
+
+  let systemPrompt = getSystemPromptForChatMode({
     chatMode,
     enableTurboEditsV2,
   });
-  return systemPrompt.replace("[[AI_RULES]]", aiRules ?? DEFAULT_AI_RULES);
+  systemPrompt = systemPrompt.replace(
+    "[[AI_RULES]]",
+    aiRules ?? DEFAULT_AI_RULES,
+  );
+
+  // Append theme prompt if provided
+  if (themePrompt) {
+    systemPrompt += "\n\n" + themePrompt;
+  }
+
+  return systemPrompt;
 };
 
 export const getSystemPromptForChatMode = ({

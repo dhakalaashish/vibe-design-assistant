@@ -17,6 +17,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queryKeys";
 
 interface ModelsSectionProps {
   providerId: string;
@@ -30,19 +32,28 @@ export function ModelsSection({ providerId }: ModelsSectionProps) {
   const [modelToDelete, setModelToDelete] = useState<string | null>(null);
   const [modelToEdit, setModelToEdit] = useState<any | null>(null);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const invalidateModels = () => {
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.languageModels.forProvider({ providerId }),
+    });
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.languageModels.byProviders,
+    });
+  };
 
   // Fetch custom models within this component now
   const {
     data: models,
     isLoading: modelsLoading,
     error: modelsError,
-    refetch: refetchModels,
   } = useLanguageModelsForProvider(providerId);
 
   const { mutate: deleteModel, isPending: isDeleting } = useDeleteCustomModel({
     onSuccess: () => {
-      refetchModels(); // Refetch models list after successful deletion
       // Optionally show a success toast here
+      invalidateModels();
     },
     onError: (error: Error) => {
       // Optionally show an error toast here
@@ -214,7 +225,7 @@ export function ModelsSection({ providerId }: ModelsSectionProps) {
         onClose={() => setIsCustomModelDialogOpen(false)}
         onSuccess={() => {
           setIsCustomModelDialogOpen(false);
-          refetchModels(); // Refetch models on success
+          invalidateModels();
         }}
         providerId={providerId}
       />
@@ -224,7 +235,7 @@ export function ModelsSection({ providerId }: ModelsSectionProps) {
         onClose={() => setIsEditModelDialogOpen(false)}
         onSuccess={() => {
           setIsEditModelDialogOpen(false);
-          refetchModels(); // Refetch models on success
+          invalidateModels();
         }}
         providerId={providerId}
         model={modelToEdit}

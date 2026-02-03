@@ -4,8 +4,9 @@ import { useLoadApp } from "@/hooks/useLoadApp";
 import { GitHubConnector } from "@/components/GitHubConnector";
 import { VercelConnector } from "@/components/VercelConnector";
 import { PortalMigrate } from "@/components/PortalMigrate";
-import { IpcClient } from "@/ipc/ipc_client";
+import { ipc } from "@/ipc/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { GithubCollaboratorManager } from "@/components/GithubCollaboratorManager";
 
 export const PublishPanel = () => {
   const selectedAppId = useAtomValue(selectedAppIdAtom);
@@ -105,6 +106,11 @@ export const PublishPanel = () => {
               folderName={app.name}
               expanded={true}
             />
+            {app.githubOrg && app.githubRepo && (
+              <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
+                <GithubCollaboratorManager appId={selectedAppId} />
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -114,8 +120,7 @@ export const PublishPanel = () => {
             <CardTitle className="flex items-center gap-2">
               <button
                 onClick={() => {
-                  const ipcClient = IpcClient.getInstance();
-                  ipcClient.openExternalUrl("https://vercel.com/dashboard");
+                  ipc.system.openExternalUrl("https://vercel.com/dashboard");
                 }}
                 className="flex items-center gap-2 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer bg-transparent border-none p-0"
               >
