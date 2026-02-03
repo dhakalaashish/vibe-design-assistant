@@ -56,6 +56,7 @@ export function useDesignSemanticInNewChat() {
     } catch (err) {
       showError(err);
     }
+    setDesignMode(null);
   };
 
   const handleDesignSemanticInfer = async () => {
