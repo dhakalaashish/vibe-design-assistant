@@ -1,12 +1,13 @@
 import { db } from "../../db";
 import { versions, apps } from "../../db/schema";
 import { eq, and } from "drizzle-orm";
+import fs from "node:fs";
+import git from "isomorphic-git";
 import { getDyadAppPath } from "../../paths/paths";
 import { neon } from "@neondatabase/serverless";
 
 import log from "electron-log";
 import { getNeonClient } from "@/neon_admin/neon_management_client";
-import { getCurrentCommitHash } from "./git_utils";
 
 const logger = log.scope("neon_timestamp_utils");
 
@@ -61,7 +62,11 @@ export async function storeDbTimestampAtCurrentVersion({
 
     // 2. Get the current commit hash
     const appPath = getDyadAppPath(app.path);
-    const currentCommitHash = await getCurrentCommitHash({ path: appPath });
+    const currentCommitHash = await git.resolveRef({
+      fs,
+      dir: appPath,
+      ref: "HEAD",
+    });
 
     logger.info(`Current commit hash: ${currentCommitHash}`);
 

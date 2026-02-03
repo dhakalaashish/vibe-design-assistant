@@ -5,7 +5,9 @@ import { apps } from "../../db/schema";
 import { eq } from "drizzle-orm";
 import { getDyadAppPath } from "../../paths/paths";
 import { spawn } from "child_process";
-import { gitCommit, gitAdd } from "../utils/git_utils";
+import fs from "node:fs";
+import git from "isomorphic-git";
+import { gitCommit } from "../utils/git_utils";
 import { storeDbTimestampAtCurrentVersion } from "../utils/neon_timestamp_utils";
 
 const logger = log.scope("portal_handlers");
@@ -114,7 +116,11 @@ export function registerPortalHandlers() {
 
       // Stage all changes and commit
       try {
-        await gitAdd({ path: appPath, filepath: "." });
+        await git.add({
+          fs,
+          dir: appPath,
+          filepath: ".",
+        });
 
         const commitHash = await gitCommit({
           path: appPath,

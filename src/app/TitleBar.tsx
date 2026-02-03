@@ -12,9 +12,9 @@ import { useDeepLink } from "@/contexts/DeepLinkContext";
 import { useEffect, useState } from "react";
 import { DyadProSuccessDialog } from "@/components/DyadProSuccessDialog";
 import { useTheme } from "@/contexts/ThemeContext";
-import { ipc } from "@/ipc/types";
+import { IpcClient } from "@/ipc/ipc_client";
 import { useUserBudgetInfo } from "@/hooks/useUserBudgetInfo";
-import type { UserBudgetInfo } from "@/ipc/types";
+import { UserBudgetInfo } from "@/ipc/ipc_types";
 import {
   Tooltip,
   TooltipContent,
@@ -35,7 +35,7 @@ export const TitleBar = () => {
     // Check if we're running on Windows
     const checkPlatform = async () => {
       try {
-        const platform = await ipc.system.getSystemPlatform();
+        const platform = await IpcClient.getInstance().getSystemPlatform();
         setShowWindowControls(platform !== "darwin");
       } catch (error) {
         console.error("Failed to get platform info:", error);
@@ -115,17 +115,18 @@ export const TitleBar = () => {
 
 function WindowsControls() {
   const { isDarkMode } = useTheme();
+  const ipcClient = IpcClient.getInstance();
 
   const minimizeWindow = () => {
-    ipc.system.minimizeWindow();
+    ipcClient.minimizeWindow();
   };
 
   const maximizeWindow = () => {
-    ipc.system.maximizeWindow();
+    ipcClient.maximizeWindow();
   };
 
   const closeWindow = () => {
-    ipc.system.closeWindow();
+    ipcClient.closeWindow();
   };
 
   return (
@@ -216,11 +217,7 @@ export function DyadProButton({
       )}
       size="sm"
     >
-      {isDyadProEnabled
-        ? userBudget?.isTrial
-          ? "Pro Trial"
-          : "Pro"
-        : "Pro (off)"}
+      {isDyadProEnabled ? "Pro" : "Pro (off)"}
       {userBudget && isDyadProEnabled && (
         <AICreditStatus userBudget={userBudget} />
       )}
@@ -228,11 +225,7 @@ export function DyadProButton({
   );
 }
 
-export function AICreditStatus({
-  userBudget,
-}: {
-  userBudget: NonNullable<UserBudgetInfo>;
-}) {
+export function AICreditStatus({ userBudget }: { userBudget: UserBudgetInfo }) {
   const remaining = Math.round(
     userBudget.totalCredits - userBudget.usedCredits,
   );

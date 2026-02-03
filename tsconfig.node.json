@@ -8,12 +8,10 @@
     "esModuleInterop": true,
     "noImplicitAny": true,
     "sourceMap": true,
+    "baseUrl": ".",
     "outDir": "dist",
     "moduleResolution": "bundler",
-    "resolveJsonModule": true,
-    "paths": {
-      "*": ["./*"]
-    }
+    "resolveJsonModule": true
 
     // /* Bundler mode */
     // // "moduleResolution": "bundler",

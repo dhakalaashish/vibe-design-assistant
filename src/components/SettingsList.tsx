@@ -5,22 +5,13 @@ import { useScrollAndNavigateTo } from "@/hooks/useScrollAndNavigateTo";
 import { useAtom } from "jotai";
 import { activeSettingsSectionAtom } from "@/atoms/viewAtoms";
 
-type SettingsSection = {
-  id: string;
-  label: string;
-};
-
-const SETTINGS_SECTIONS: SettingsSection[] = [
+const SETTINGS_SECTIONS = [
   { id: "general-settings", label: "General" },
   { id: "workflow-settings", label: "Workflow" },
   { id: "ai-settings", label: "AI" },
   { id: "provider-settings", label: "Model Providers" },
   { id: "telemetry", label: "Telemetry" },
   { id: "integrations", label: "Integrations" },
-  {
-    id: "agent-permissions",
-    label: "Agent Permissions",
-  },
   { id: "tools-mcp", label: "Tools (MCP)" },
   { id: "experiments", label: "Experiments" },
   { id: "danger-zone", label: "Danger Zone" },
@@ -28,13 +19,10 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
 
 export function SettingsList({ show }: { show: boolean }) {
   const [activeSection, setActiveSection] = useAtom(activeSettingsSectionAtom);
-
   const scrollAndNavigateTo = useScrollAndNavigateTo("/settings", {
     behavior: "smooth",
     block: "start",
   });
-
-  const settingsSections = SETTINGS_SECTIONS;
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -49,7 +37,7 @@ export function SettingsList({ show }: { show: boolean }) {
       { rootMargin: "-20% 0px -80% 0px", threshold: 0 },
     );
 
-    for (const section of settingsSections) {
+    for (const section of SETTINGS_SECTIONS) {
       const el = document.getElementById(section.id);
       if (el) {
         observer.observe(el);
@@ -59,7 +47,7 @@ export function SettingsList({ show }: { show: boolean }) {
     return () => {
       observer.disconnect();
     };
-  }, [settingsSections, setActiveSection]);
+  }, []);
 
   if (!show) {
     return null;
@@ -74,7 +62,7 @@ export function SettingsList({ show }: { show: boolean }) {
       </div>
       <ScrollArea className="flex-grow">
         <div className="space-y-1 p-4 pt-0">
-          {settingsSections.map((section) => (
+          {SETTINGS_SECTIONS.map((section) => (
             <button
               key={section.id}
               onClick={() => handleScrollAndNavigateTo(section.id)}

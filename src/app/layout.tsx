@@ -5,13 +5,9 @@ import { DeepLinkProvider } from "../contexts/DeepLinkContext";
 import { Toaster } from "sonner";
 import { TitleBar } from "./TitleBar";
 import { useEffect, type ReactNode } from "react";
-import { useRunApp, useAppOutputSubscription } from "@/hooks/useRunApp";
+import { useRunApp } from "@/hooks/useRunApp";
 import { useAtomValue, useSetAtom } from "jotai";
-import {
-  appConsoleEntriesAtom,
-  previewModeAtom,
-  selectedAppIdAtom,
-} from "@/atoms/appAtoms";
+import { previewModeAtom, selectedAppIdAtom } from "@/atoms/appAtoms";
 import { useSettings } from "@/hooks/useSettings";
 import type { ZoomLevel } from "@/lib/schemas";
 import { selectedComponentsPreviewAtom } from "@/atoms/previewAtoms";
@@ -21,8 +17,6 @@ const DEFAULT_ZOOM_LEVEL: ZoomLevel = "100";
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   const { refreshAppIframe } = useRunApp();
-  // Subscribe to app output events once at the root level to avoid duplicates
-  useAppOutputSubscription();
   const previewMode = useAtomValue(previewModeAtom);
   const { settings } = useSettings();
   const setSelectedComponentsPreview = useSetAtom(
@@ -30,7 +24,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   );
   const setChatInput = useSetAtom(chatInputValueAtom);
   const selectedAppId = useAtomValue(selectedAppIdAtom);
-  const setConsoleEntries = useSetAtom(appConsoleEntriesAtom);
 
   useEffect(() => {
     const zoomLevel = settings?.zoomLevel ?? DEFAULT_ZOOM_LEVEL;
@@ -80,7 +73,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   useEffect(() => {
     setChatInput("");
     setSelectedComponentsPreview([]);
-    setConsoleEntries([]);
   }, [selectedAppId]);
 
   return (

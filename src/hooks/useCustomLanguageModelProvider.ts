@@ -1,14 +1,14 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  ipc,
-  type CreateCustomLanguageModelProviderParams,
-  type LanguageModelProvider,
-} from "@/ipc/types";
+import { IpcClient } from "@/ipc/ipc_client";
+import type {
+  CreateCustomLanguageModelProviderParams,
+  LanguageModelProvider,
+} from "@/ipc/ipc_types";
 import { showError } from "@/lib/toast";
-import { queryKeys } from "@/lib/queryKeys";
 
 export function useCustomLanguageModelProvider() {
   const queryClient = useQueryClient();
+  const ipcClient = IpcClient.getInstance();
 
   const createProviderMutation = useMutation({
     mutationFn: async (
@@ -24,7 +24,7 @@ export function useCustomLanguageModelProvider() {
         throw new Error("API base URL is required");
       }
 
-      return ipc.languageModel.createCustomProvider({
+      return ipcClient.createCustomLanguageModelProvider({
         id: params.id.trim(),
         name: params.name.trim(),
         apiBaseUrl: params.apiBaseUrl.trim(),
@@ -33,9 +33,7 @@ export function useCustomLanguageModelProvider() {
     },
     onSuccess: () => {
       // Invalidate and refetch
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.languageModels.providers,
-      });
+      queryClient.invalidateQueries({ queryKey: ["languageModelProviders"] });
     },
     onError: (error) => {
       showError(error);
@@ -56,7 +54,7 @@ export function useCustomLanguageModelProvider() {
         throw new Error("API base URL is required");
       }
 
-      return ipc.languageModel.editCustomProvider({
+      return ipcClient.editCustomLanguageModelProvider({
         id: params.id.trim(),
         name: params.name.trim(),
         apiBaseUrl: params.apiBaseUrl.trim(),
@@ -65,9 +63,7 @@ export function useCustomLanguageModelProvider() {
     },
     onSuccess: () => {
       // Invalidate and refetch
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.languageModels.providers,
-      });
+      queryClient.invalidateQueries({ queryKey: ["languageModelProviders"] });
     },
     onError: (error) => {
       showError(error);
@@ -80,13 +76,11 @@ export function useCustomLanguageModelProvider() {
         throw new Error("Provider ID is required");
       }
 
-      return ipc.languageModel.deleteCustomProvider({ providerId });
+      return ipcClient.deleteCustomLanguageModelProvider(providerId);
     },
     onSuccess: () => {
       // Invalidate and refetch
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.languageModels.providers,
-      });
+      queryClient.invalidateQueries({ queryKey: ["languageModelProviders"] });
     },
     onError: (error) => {
       showError(error);

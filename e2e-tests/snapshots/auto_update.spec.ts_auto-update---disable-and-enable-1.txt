@@ -1,2 +1,20 @@
-- "enableAutoUpdate": true
-+ "enableAutoUpdate": false
+{
+  "selectedModel": {
+    "name": "auto",
+    "provider": "auto"
+  },
+  "providerSettings": {},
+  "telemetryConsent": "unset",
+  "telemetryUserId": "[UUID]",
+  "hasRunBefore": true,
+  "experiments": {},
+  "lastShownReleaseNotesVersion": "[scrubbed]",
+  "enableProLazyEditsMode": true,
+  "enableProSmartFilesContextMode": true,
+  "selectedTemplateId": "react",
+  "selectedChatMode": "build",
+  "enableAutoFixProblems": false,
+  "enableAutoUpdate": false,
+  "releaseChannel": "stable",
+  "isTestMode": true
+}

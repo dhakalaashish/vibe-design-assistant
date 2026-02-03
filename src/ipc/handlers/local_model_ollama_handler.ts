@@ -1,7 +1,6 @@
+import { ipcMain } from "electron";
 import log from "electron-log";
-import { createTypedHandler } from "./base";
-import { languageModelContracts } from "../types/language-model";
-import type { LocalModel } from "../types/language-model";
+import { LocalModelListResponse, LocalModel } from "../ipc_types";
 
 const logger = log.scope("ollama_handler");
 
@@ -56,7 +55,7 @@ interface OllamaModel {
   };
 }
 
-export async function fetchOllamaModels(): Promise<{ models: LocalModel[] }> {
+export async function fetchOllamaModels(): Promise<LocalModelListResponse> {
   try {
     const response = await fetch(`${getOllamaApiUrl()}/api/tags`);
     if (!response.ok) {
@@ -98,7 +97,10 @@ export async function fetchOllamaModels(): Promise<{ models: LocalModel[] }> {
 }
 
 export function registerOllamaHandlers() {
-  createTypedHandler(languageModelContracts.listOllamaModels, async () => {
-    return fetchOllamaModels();
-  });
+  ipcMain.handle(
+    "local-models:list-ollama",
+    async (): Promise<LocalModelListResponse> => {
+      return fetchOllamaModels();
+    },
+  );
 }

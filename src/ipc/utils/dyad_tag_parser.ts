@@ -1,5 +1,4 @@
 import { normalizePath } from "../../../shared/normalizePath";
-import { unescapeXmlAttr, unescapeXmlContent } from "../../../shared/xmlEscape";
 import log from "electron-log";
 import { SqlQuery } from "../../lib/schemas";
 
@@ -19,16 +18,14 @@ export function getDyadWriteTags(fullResponse: string): {
 
   while ((match = dyadWriteRegex.exec(fullResponse)) !== null) {
     const attributesString = match[1];
-    let content = unescapeXmlContent(match[2].trim());
+    let content = match[2].trim();
 
     const pathMatch = pathRegex.exec(attributesString);
     const descriptionMatch = descriptionRegex.exec(attributesString);
 
     if (pathMatch && pathMatch[1]) {
-      const path = unescapeXmlAttr(pathMatch[1]);
-      const description = descriptionMatch?.[1]
-        ? unescapeXmlAttr(descriptionMatch[1])
-        : undefined;
+      const path = pathMatch[1];
+      const description = descriptionMatch?.[1];
 
       const contentLines = content.split("\n");
       if (contentLines[0]?.startsWith("```")) {
@@ -60,8 +57,8 @@ export function getDyadRenameTags(fullResponse: string): {
   const tags: { from: string; to: string }[] = [];
   while ((match = dyadRenameRegex.exec(fullResponse)) !== null) {
     tags.push({
-      from: normalizePath(unescapeXmlAttr(match[1])),
-      to: normalizePath(unescapeXmlAttr(match[2])),
+      from: normalizePath(match[1]),
+      to: normalizePath(match[2]),
     });
   }
   return tags;
@@ -73,7 +70,7 @@ export function getDyadDeleteTags(fullResponse: string): string[] {
   let match;
   const paths: string[] = [];
   while ((match = dyadDeleteRegex.exec(fullResponse)) !== null) {
-    paths.push(normalizePath(unescapeXmlAttr(match[1])));
+    paths.push(normalizePath(match[1]));
   }
   return paths;
 }
@@ -84,7 +81,7 @@ export function getDyadAddDependencyTags(fullResponse: string): string[] {
   let match;
   const packages: string[] = [];
   while ((match = dyadAddDependencyRegex.exec(fullResponse)) !== null) {
-    packages.push(...unescapeXmlAttr(match[1]).split(" "));
+    packages.push(...match[1].split(" "));
   }
   return packages;
 }
@@ -94,7 +91,7 @@ export function getDyadChatSummaryTag(fullResponse: string): string | null {
     /<dyad-chat-summary>([\s\S]*?)<\/dyad-chat-summary>/g;
   const match = dyadChatSummaryRegex.exec(fullResponse);
   if (match && match[1]) {
-    return unescapeXmlContent(match[1].trim());
+    return match[1].trim();
   }
   return null;
 }
@@ -108,11 +105,9 @@ export function getDyadExecuteSqlTags(fullResponse: string): SqlQuery[] {
 
   while ((match = dyadExecuteSqlRegex.exec(fullResponse)) !== null) {
     const attributesString = match[1] || "";
-    let content = unescapeXmlContent(match[2].trim());
+    let content = match[2].trim();
     const descriptionMatch = descriptionRegex.exec(attributesString);
-    const description = descriptionMatch?.[1]
-      ? unescapeXmlAttr(descriptionMatch[1])
-      : undefined;
+    const description = descriptionMatch?.[1];
 
     // Handle markdown code blocks if present
     const contentLines = content.split("\n");
@@ -137,7 +132,7 @@ export function getDyadCommandTags(fullResponse: string): string[] {
   const commands: string[] = [];
 
   while ((match = dyadCommandRegex.exec(fullResponse)) !== null) {
-    commands.push(unescapeXmlAttr(match[1]));
+    commands.push(match[1]);
   }
 
   return commands;
@@ -158,16 +153,14 @@ export function getDyadSearchReplaceTags(fullResponse: string): {
 
   while ((match = dyadSearchReplaceRegex.exec(fullResponse)) !== null) {
     const attributesString = match[1] || "";
-    let content = unescapeXmlContent(match[2].trim());
+    let content = match[2].trim();
 
     const pathMatch = pathRegex.exec(attributesString);
     const descriptionMatch = descriptionRegex.exec(attributesString);
 
     if (pathMatch && pathMatch[1]) {
-      const path = unescapeXmlAttr(pathMatch[1]);
-      const description = descriptionMatch?.[1]
-        ? unescapeXmlAttr(descriptionMatch[1])
-        : undefined;
+      const path = pathMatch[1];
+      const description = descriptionMatch?.[1];
 
       // Handle markdown code fences if present
       const contentLines = content.split("\n");

@@ -2,7 +2,7 @@ import type React from "react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 
-import { ipc } from "@/ipc/types";
+import { IpcClient } from "../../ipc/ipc_client";
 
 import { Package, ChevronsUpDown, ChevronsDownUp } from "lucide-react";
 import { CodeHighlight } from "./CodeHighlight";
@@ -45,7 +45,7 @@ export const DyadAddDependency: React.FC<DyadAddDependencyProps> = ({
                     className="cursor-pointer text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                     key={p}
                     onClick={() => {
-                      ipc.system.openExternalUrl(
+                      IpcClient.getInstance().openExternalUrl(
                         `https://www.npmjs.com/package/${p}`,
                       );
                     }}

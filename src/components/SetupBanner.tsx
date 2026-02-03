@@ -2,6 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import {
   ChevronRight,
   GiftIcon,
+  Sparkles,
   CheckCircle,
   AlertCircle,
   XCircle,
@@ -14,7 +15,7 @@ import { providerSettingsRoute } from "@/routes/settings/providers/$provider";
 import SetupProviderCard from "@/components/SetupProviderCard";
 
 import { useState, useEffect, useCallback } from "react";
-import { ipc, NodeSystemInfo } from "@/ipc/types";
+import { IpcClient } from "@/ipc/ipc_client";
 import {
   Accordion,
   AccordionContent,
@@ -23,19 +24,15 @@ import {
 } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { NodeSystemInfo } from "@/ipc/ipc_types";
 import { usePostHog } from "posthog-js/react";
 import { useLanguageModelProviders } from "@/hooks/useLanguageModelProviders";
 import { useScrollAndNavigateTo } from "@/hooks/useScrollAndNavigateTo";
 // @ts-ignore
 import logo from "../../assets/logo.svg";
-// @ts-ignore
-import googleIcon from "../../assets/ai-logos/google-g-icon.svg";
-// @ts-ignore
-import openrouterLogo from "../../assets/ai-logos/openrouter-logo.png";
 import { OnboardingBanner } from "./home/OnboardingBanner";
 import { showError } from "@/lib/toast";
 import { useSettings } from "@/hooks/useSettings";
-import { DyadProTrialDialog } from "./DyadProTrialDialog";
 
 type NodeInstallStep =
   | "install"
@@ -58,7 +55,7 @@ export function SetupBanner() {
   const checkNode = useCallback(async () => {
     try {
       setNodeCheckError(false);
-      const status = await ipc.system.getNodejsStatus();
+      const status = await IpcClient.getInstance().getNodejsStatus();
       setNodeSystemInfo(status);
     } catch (error) {
       console.error("Failed to check Node.js status:", error);
@@ -68,17 +65,16 @@ export function SetupBanner() {
   }, [setNodeSystemInfo, setNodeCheckError]);
   const [showManualConfig, setShowManualConfig] = useState(false);
   const [isSelectingPath, setIsSelectingPath] = useState(false);
-  const [showDyadProTrialDialog, setShowDyadProTrialDialog] = useState(false);
   const { updateSettings } = useSettings();
 
   // Add handler for manual path selection
   const handleManualNodeConfig = useCallback(async () => {
     setIsSelectingPath(true);
     try {
-      const result = await ipc.system.selectNodeFolder();
+      const result = await IpcClient.getInstance().selectNodeFolder();
       if (result.path) {
         await updateSettings({ customNodePath: result.path });
-        await ipc.system.reloadEnvPath();
+        await IpcClient.getInstance().reloadEnvPath();
         await checkNode();
         setNodeInstallStep("finished-checking");
         setShowManualConfig(false);
@@ -120,7 +116,9 @@ export function SetupBanner() {
   };
   const handleDyadProSetupClick = () => {
     posthog.capture("setup-flow:ai-provider-setup:dyad:click");
-    setShowDyadProTrialDialog(true);
+    IpcClient.getInstance().openExternalUrl(
+      "https://www.dyad.sh/pro?utm_source=dyad-app&utm_medium=app&utm_campaign=setup-banner",
+    );
   };
 
   const handleOtherProvidersClick = () => {
@@ -131,13 +129,13 @@ export function SetupBanner() {
   const handleNodeInstallClick = useCallback(async () => {
     posthog.capture("setup-flow:start-node-install-click");
     setNodeInstallStep("waiting-for-continue");
-    ipc.system.openExternalUrl(nodeSystemInfo!.nodeDownloadUrl);
+    IpcClient.getInstance().openExternalUrl(nodeSystemInfo!.nodeDownloadUrl);
   }, [nodeSystemInfo, setNodeInstallStep]);
 
   const finishNodeInstall = useCallback(async () => {
     posthog.capture("setup-flow:continue-node-install-click");
     setNodeInstallStep("continue-processing");
-    await ipc.system.reloadEnvPath();
+    await IpcClient.getInstance().reloadEnvPath();
     await checkNode();
     setNodeInstallStep("finished-checking");
   }, [checkNode, setNodeInstallStep]);
@@ -156,7 +154,7 @@ export function SetupBanner() {
   if (itemsNeedAction.length === 0) {
     return (
       <h1 className="text-center text-5xl font-bold mb-8 bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 dark:from-gray-100 dark:to-gray-400 tracking-tight">
-        Build a new app
+        Build your dream app
       </h1>
     );
   }
@@ -179,7 +177,7 @@ export function SetupBanner() {
 
   return (
     <>
-      <p className="text-xl font-medium text-zinc-700 dark:text-zinc-300 p-4 pt-6">
+      <p className="text-xl font-medium text-zinc-700 dark:text-zinc-300 p-4">
         Setup Dyad
       </p>
       <OnboardingBanner
@@ -238,7 +236,7 @@ export function SetupBanner() {
                       <a
                         className="text-blue-500 dark:text-blue-400 hover:underline"
                         onClick={() => {
-                          ipc.system.openExternalUrl(
+                          IpcClient.getInstance().openExternalUrl(
                             "https://nodejs.org/en/download",
                           );
                         }}
@@ -317,26 +315,14 @@ export function SetupBanner() {
               <p className="text-[15px] mb-3">
                 Not sure what to do? Watch the Get Started video above ☝️
               </p>
-
-              <SetupProviderCard
-                variant="dyad"
-                onClick={handleDyadProSetupClick}
-                tabIndex={isNodeSetupComplete ? 0 : -1}
-                leadingIcon={
-                  <img src={logo} alt="Dyad Logo" className="w-6 h-6 mr-0.5" />
-                }
-                title="Start with Dyad Pro free trial"
-                subtitle="Unlock the full power of Dyad"
-                chip={<>Recommended</>}
-              />
-              <div className="mt-2 flex gap-2">
+              <div className="flex gap-2">
                 <SetupProviderCard
                   className="flex-1"
                   variant="google"
                   onClick={handleGoogleSetupClick}
                   tabIndex={isNodeSetupComplete ? 0 : -1}
                   leadingIcon={
-                    <img src={googleIcon} alt="Google" className="w-4 h-4" />
+                    <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                   }
                   title="Setup Google Gemini API Key"
                   chip={<>Free</>}
@@ -348,16 +334,25 @@ export function SetupBanner() {
                   onClick={handleOpenRouterSetupClick}
                   tabIndex={isNodeSetupComplete ? 0 : -1}
                   leadingIcon={
-                    <img
-                      src={openrouterLogo}
-                      alt="OpenRouter"
-                      className="w-4 h-4"
-                    />
+                    <Sparkles className="w-4 h-4 text-teal-600 dark:text-teal-400" />
                   }
                   title="Setup OpenRouter API Key"
                   chip={<>Free</>}
                 />
               </div>
+
+              <SetupProviderCard
+                className="mt-2"
+                variant="dyad"
+                onClick={handleDyadProSetupClick}
+                tabIndex={isNodeSetupComplete ? 0 : -1}
+                leadingIcon={
+                  <img src={logo} alt="Dyad Logo" className="w-6 h-6 mr-0.5" />
+                }
+                title="Setup Dyad Pro"
+                subtitle="Access all AI models with one plan"
+                chip={<>Recommended</>}
+              />
 
               <div
                 className="mt-2 p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800/70 transition-colors"
@@ -386,11 +381,6 @@ export function SetupBanner() {
           </AccordionItem>
         </Accordion>
       </div>
-
-      <DyadProTrialDialog
-        isOpen={showDyadProTrialDialog}
-        onClose={() => setShowDyadProTrialDialog(false)}
-      />
     </>
   );
 }
@@ -402,7 +392,9 @@ function NodeJsHelpCallout() {
         If you run into issues, read our{" "}
         <a
           onClick={() => {
-            ipc.system.openExternalUrl("https://www.dyad.sh/docs/help/nodejs");
+            IpcClient.getInstance().openExternalUrl(
+              "https://www.dyad.sh/docs/help/nodejs",
+            );
           }}
           className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
         >
@@ -482,7 +474,7 @@ export const OpenRouterSetupBanner = ({
       }}
       tabIndex={0}
       leadingIcon={
-        <img src={openrouterLogo} alt="OpenRouter" className="w-4 h-4" />
+        <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400" />
       }
       title="Setup OpenRouter API Key"
       chip={

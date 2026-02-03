@@ -1,6 +1,6 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { Trash2, Loader2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,7 +23,6 @@ interface DeleteConfirmationDialogProps {
   itemType?: string;
   onDelete: () => void | Promise<void>;
   trigger?: React.ReactNode;
-  isDeleting?: boolean;
 }
 
 export function DeleteConfirmationDialog({
@@ -31,7 +30,6 @@ export function DeleteConfirmationDialog({
   itemType = "item",
   onDelete,
   trigger,
-  isDeleting = false,
 }: DeleteConfirmationDialogProps) {
   return (
     <AlertDialog>
@@ -45,7 +43,6 @@ export function DeleteConfirmationDialog({
                 size="icon"
                 variant="ghost"
                 data-testid="delete-prompt-button"
-                disabled={isDeleting}
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -65,17 +62,8 @@ export function DeleteConfirmationDialog({
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={onDelete} disabled={isDeleting}>
-            {isDeleting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Deleting...
-              </>
-            ) : (
-              "Delete"
-            )}
-          </AlertDialogAction>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={onDelete}>Delete</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

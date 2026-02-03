@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Bell, Loader2, CheckCircle2 } from "lucide-react";
 import {
@@ -11,6 +11,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { getAllChats } from "@/lib/chat";
 import type { ChatSummary } from "@/lib/schemas";
 import { useAtomValue } from "jotai";
 import {
@@ -19,7 +20,6 @@ import {
 } from "@/atoms/chatAtoms";
 import { useLoadApps } from "@/hooks/useLoadApps";
 import { useSelectChat } from "@/hooks/useSelectChat";
-import { useChats } from "@/hooks/useChats";
 
 export function ChatActivityButton() {
   const [open, setOpen] = useState(false);
@@ -61,18 +61,33 @@ export function ChatActivityButton() {
 }
 
 function ChatActivityList({ onSelect }: { onSelect?: () => void }) {
+  const [chats, setChats] = useState<ChatSummary[]>([]);
+  const [loading, setLoading] = useState(true);
   const isStreamingById = useAtomValue(isStreamingByIdAtom);
   const recentStreamChatIds = useAtomValue(recentStreamChatIdsAtom);
   const apps = useLoadApps();
   const { selectChat } = useSelectChat();
-  const { chats: allChats, loading } = useChats(null);
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const all = await getAllChats();
+        if (!mounted) return;
+        const recent = Array.from(recentStreamChatIds)
+          .map((id) => all.find((c) => c.id === id))
+          .filter((c) => c !== undefined);
+        // Sort recent first
+        setChats([...recent].reverse());
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [recentStreamChatIds]);
 
-  const rows = useMemo(() => {
-    const recent = Array.from(recentStreamChatIds)
-      .map((id) => allChats.find((c: ChatSummary) => c.id === id))
-      .filter((c): c is ChatSummary => c !== undefined);
-    return [...recent].reverse().slice(0, 30);
-  }, [recentStreamChatIds, allChats]);
+  const rows = useMemo(() => chats.slice(0, 30), [chats]);
 
   if (loading) {
     return (

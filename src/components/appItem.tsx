@@ -2,7 +2,7 @@ import { formatDistanceToNow } from "date-fns";
 import { Star } from "lucide-react";
 import { SidebarMenuItem } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import type { ListedApp } from "@/ipc/types/app";
+import { App } from "@/ipc/ipc_types";
 import {
   Tooltip,
   TooltipContent,
@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/tooltip";
 
 type AppItemProps = {
-  app: ListedApp;
+  app: App;
   handleAppClick: (id: number) => void;
   selectedAppId: number | null;
   handleToggleFavorite: (appId: number, e: React.MouseEvent) => void;

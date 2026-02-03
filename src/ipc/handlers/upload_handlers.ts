@@ -1,12 +1,19 @@
 import log from "electron-log";
 import fetch from "node-fetch";
-import { createTypedHandler } from "./base";
-import { systemContracts } from "../types/system";
+import { createLoggedHandler } from "./safe_handle";
 
 const logger = log.scope("upload_handlers");
 
+const handle = createLoggedHandler(logger);
+
+interface UploadToSignedUrlParams {
+  url: string;
+  contentType: string;
+  data: any;
+}
+
 export function registerUploadHandlers() {
-  createTypedHandler(systemContracts.uploadToSignedUrl, async (_, params) => {
+  handle("upload-to-signed-url", async (_, params: UploadToSignedUrlParams) => {
     const { url, contentType, data } = params;
     logger.debug("IPC: upload-to-signed-url called");
 

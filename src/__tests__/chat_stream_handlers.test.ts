@@ -13,9 +13,9 @@ import {
   hasUnclosedDyadWrite,
 } from "../ipc/handlers/chat_stream_handlers";
 import fs from "node:fs";
+import git from "isomorphic-git";
 import { db } from "../db";
-import { cleanFullResponse } from "../ipc/utils/cleanFullResponse";
-import { gitAdd, gitRemove, gitCommit } from "../ipc/utils/git_utils";
+import { cleanFullResponse } from "@/ipc/utils/cleanFullResponse";
 
 // Mock fs with default export
 vi.mock("node:fs", async () => {
@@ -43,19 +43,14 @@ vi.mock("node:fs", async () => {
   };
 });
 
-// Mock Git utils
-vi.mock("../ipc/utils/git_utils", () => ({
-  gitAdd: vi.fn(),
-  gitCommit: vi.fn(),
-  gitRemove: vi.fn(),
-  gitRenameBranch: vi.fn(),
-  gitCurrentBranch: vi.fn(),
-  gitLog: vi.fn(),
-  gitInit: vi.fn(),
-  gitPush: vi.fn(),
-  gitSetRemoteUrl: vi.fn(),
-  gitStatus: vi.fn().mockResolvedValue([]),
-  getGitUncommittedFiles: vi.fn().mockResolvedValue([]),
+// Mock isomorphic-git
+vi.mock("isomorphic-git", () => ({
+  default: {
+    add: vi.fn().mockResolvedValue(undefined),
+    remove: vi.fn().mockResolvedValue(undefined),
+    commit: vi.fn().mockResolvedValue(undefined),
+    statusMatrix: vi.fn().mockResolvedValue([]),
+  },
 }));
 
 // Mock paths module to control getDyadAppPath
@@ -702,20 +697,18 @@ describe("processFullResponse", () => {
 
     expect(fs.mkdirSync).toHaveBeenCalledWith(
       "/mock/user/data/path/mock-app-path/src",
-      {
-        recursive: true,
-      },
+      { recursive: true },
     );
     expect(fs.writeFileSync).toHaveBeenCalledWith(
       "/mock/user/data/path/mock-app-path/src/file1.js",
       "console.log('Hello');",
     );
-    expect(gitAdd).toHaveBeenCalledWith(
+    expect(git.add).toHaveBeenCalledWith(
       expect.objectContaining({
         filepath: "src/file1.js",
       }),
     );
-    expect(gitCommit).toHaveBeenCalled();
+    expect(git.commit).toHaveBeenCalled();
     expect(result).toEqual({ updatedFiles: true });
   });
 
@@ -761,21 +754,15 @@ describe("processFullResponse", () => {
     // Check that directories were created for each file path
     expect(fs.mkdirSync).toHaveBeenCalledWith(
       "/mock/user/data/path/mock-app-path/src",
-      {
-        recursive: true,
-      },
+      { recursive: true },
     );
     expect(fs.mkdirSync).toHaveBeenCalledWith(
       "/mock/user/data/path/mock-app-path/src/utils",
-      {
-        recursive: true,
-      },
+      { recursive: true },
     );
     expect(fs.mkdirSync).toHaveBeenCalledWith(
       "/mock/user/data/path/mock-app-path/src/components",
-      {
-        recursive: true,
-      },
+      { recursive: true },
     );
 
     // Using toHaveBeenNthCalledWith to check each specific call
@@ -796,24 +783,24 @@ describe("processFullResponse", () => {
     );
 
     // Verify git operations were called for each file
-    expect(gitAdd).toHaveBeenCalledWith(
+    expect(git.add).toHaveBeenCalledWith(
       expect.objectContaining({
         filepath: "src/file1.js",
       }),
     );
-    expect(gitAdd).toHaveBeenCalledWith(
+    expect(git.add).toHaveBeenCalledWith(
       expect.objectContaining({
         filepath: "src/utils/file2.js",
       }),
     );
-    expect(gitAdd).toHaveBeenCalledWith(
+    expect(git.add).toHaveBeenCalledWith(
       expect.objectContaining({
         filepath: "src/components/Button.tsx",
       }),
     );
 
     // Verify commit was called once after all files were added
-    expect(gitCommit).toHaveBeenCalledTimes(1);
+    expect(git.commit).toHaveBeenCalledTimes(1);
     expect(result).toEqual({ updatedFiles: true });
   });
 
@@ -832,25 +819,23 @@ describe("processFullResponse", () => {
 
     expect(fs.mkdirSync).toHaveBeenCalledWith(
       "/mock/user/data/path/mock-app-path/src/components",
-      {
-        recursive: true,
-      },
+      { recursive: true },
     );
     expect(fs.renameSync).toHaveBeenCalledWith(
       "/mock/user/data/path/mock-app-path/src/components/OldComponent.jsx",
       "/mock/user/data/path/mock-app-path/src/components/NewComponent.jsx",
     );
-    expect(gitAdd).toHaveBeenCalledWith(
+    expect(git.add).toHaveBeenCalledWith(
       expect.objectContaining({
         filepath: "src/components/NewComponent.jsx",
       }),
     );
-    expect(gitRemove).toHaveBeenCalledWith(
+    expect(git.remove).toHaveBeenCalledWith(
       expect.objectContaining({
         filepath: "src/components/OldComponent.jsx",
       }),
     );
-    expect(gitCommit).toHaveBeenCalled();
+    expect(git.commit).toHaveBeenCalled();
     expect(result).toEqual({ updatedFiles: true });
   });
 
@@ -867,7 +852,7 @@ describe("processFullResponse", () => {
 
     expect(fs.mkdirSync).toHaveBeenCalled();
     expect(fs.renameSync).not.toHaveBeenCalled();
-    expect(gitCommit).not.toHaveBeenCalled();
+    expect(git.commit).not.toHaveBeenCalled();
     expect(result).toEqual({
       updatedFiles: false,
       extraFiles: undefined,
@@ -890,12 +875,12 @@ describe("processFullResponse", () => {
     expect(fs.unlinkSync).toHaveBeenCalledWith(
       "/mock/user/data/path/mock-app-path/src/components/Unused.jsx",
     );
-    expect(gitRemove).toHaveBeenCalledWith(
+    expect(git.remove).toHaveBeenCalledWith(
       expect.objectContaining({
         filepath: "src/components/Unused.jsx",
       }),
     );
-    expect(gitCommit).toHaveBeenCalled();
+    expect(git.commit).toHaveBeenCalled();
     expect(result).toEqual({ updatedFiles: true });
   });
 
@@ -911,8 +896,8 @@ describe("processFullResponse", () => {
     });
 
     expect(fs.unlinkSync).not.toHaveBeenCalled();
-    expect(gitRemove).not.toHaveBeenCalled();
-    expect(gitCommit).not.toHaveBeenCalled();
+    expect(git.remove).not.toHaveBeenCalled();
+    expect(git.commit).not.toHaveBeenCalled();
     expect(result).toEqual({
       updatedFiles: false,
       extraFiles: undefined,
@@ -957,11 +942,11 @@ describe("processFullResponse", () => {
     );
 
     // Check git operations
-    expect(gitAdd).toHaveBeenCalledTimes(2); // For the write and rename
-    expect(gitRemove).toHaveBeenCalledTimes(2); // For the rename and delete
+    expect(git.add).toHaveBeenCalledTimes(2); // For the write and rename
+    expect(git.remove).toHaveBeenCalledTimes(2); // For the rename and delete
 
     // Check the commit message includes all operations
-    expect(gitCommit).toHaveBeenCalledWith(
+    expect(git.commit).toHaveBeenCalledWith(
       expect.objectContaining({
         message: expect.stringContaining(
           "wrote 1 file(s), renamed 1 file(s), deleted 1 file(s)",

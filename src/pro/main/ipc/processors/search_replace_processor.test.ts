@@ -2,8 +2,32 @@ import { describe, it, expect } from "vitest";
 import { applySearchReplace } from "./search_replace_processor";
 
 describe("applySearchReplace", () => {
-  describe("cascading fuzzy matching", () => {
-    it("should match content with smart quotes normalized (Pass 4)", () => {
+  describe("fuzzy matching with Levenshtein distance", () => {
+    it("should match content with minor typos", () => {
+      const originalContent = `function hello() {
+  console.log("Hello, World!");
+  return true;
+}`;
+
+      // Search block has a typo: "consle" instead of "console"
+      const diffContent = `<<<<<<< SEARCH
+function hello() {
+  consle.log("Hello, World!");
+  return true;
+}
+=======
+function hello() {
+  console.log("Hello, Universe!");
+  return true;
+}
+>>>>>>> REPLACE`;
+
+      const result = applySearchReplace(originalContent, diffContent);
+      expect(result.success).toBe(true);
+      expect(result.content).toContain("Hello, Universe!");
+    });
+
+    it("should match content with smart quotes normalized", () => {
       const originalContent = `function greet() {
   console.log("Hello");
 }`;
@@ -24,16 +48,16 @@ function greet() {
       expect(result.content).toContain("Goodbye");
     });
 
-    it("should fail when content does not match in any pass", () => {
+    it("should fail when similarity is below threshold", () => {
       const originalContent = `function hello() {
   console.log("Hello, World!");
   return true;
 }`;
 
-      // Search block is completely different
+      // Search block is too different (multiple typos and changes)
       const diffContent = `<<<<<<< SEARCH
 function goodbye() {
-  console.error("Bye, Earth!");
+  consle.error("Bye, Earth!");
   return false;
 }
 =======
@@ -45,19 +69,19 @@ function hello() {
 
       const result = applySearchReplace(originalContent, diffContent);
       expect(result.success).toBe(false);
-      expect(result.error).toContain("did not match any content");
+      expect(result.error).toContain("Best fuzzy match had similarity");
     });
 
-    it("should prefer exact match when available", () => {
+    it("should prefer exact match over fuzzy match", () => {
       const originalContent = `function hello() {
   console.log("Hello");
 }
 
 function hello() {
-  console.log("Hello");
+  consle.log("Hello");
 }`;
 
-      // Both occurrences are exact matches - should be ambiguous
+      // Should match the first exact occurrence, not the fuzzy one
       const diffContent = `<<<<<<< SEARCH
 function hello() {
   console.log("Hello");
@@ -69,11 +93,13 @@ function hello() {
 >>>>>>> REPLACE`;
 
       const result = applySearchReplace(originalContent, diffContent);
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("ambiguous");
+      expect(result.success).toBe(true);
+      // Should only replace the first exact match
+      expect(result.content).toContain('console.log("Goodbye")');
+      expect(result.content).toContain('consle.log("Hello")');
     });
 
-    it("should handle whitespace differences with edge whitespace normalization (Pass 3)", () => {
+    it("should handle whitespace differences with lenient matching before fuzzy", () => {
       const originalContent = `function test() {
     console.log("test");
 }`;

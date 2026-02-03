@@ -3,10 +3,8 @@ import { expect } from "@playwright/test";
 
 test("create next.js app", async ({ po }) => {
   await po.setUp();
-  const beforeSettings = po.recordSettings();
   await po.goToHubAndSelectTemplate("Next.js Template");
-  await po.selectChatMode("build");
-  po.snapshotSettingsDelta(beforeSettings);
+  await po.snapshotSettings();
 
   // Create an app
   await po.sendPrompt("tc=edit-made-with-dyad");

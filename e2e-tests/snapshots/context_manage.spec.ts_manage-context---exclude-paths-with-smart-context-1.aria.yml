@@ -1,5 +1,5 @@
-- dialog "Codebase Context":
-  - heading "Codebase Context" [level=2]
+- dialog:
+  - heading "Codebase Context" [level=3]
   - paragraph:
     - text: Select the files to use as context.
     - img
@@ -18,5 +18,3 @@
     - img
   - textbox "src/**/*.config.ts"
   - button "Add"
-  - button "Close":
-    - img

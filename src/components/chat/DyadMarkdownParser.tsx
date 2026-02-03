@@ -1,14 +1,11 @@
 import React, { useMemo } from "react";
 import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
 import { DyadWrite } from "./DyadWrite";
 import { DyadRename } from "./DyadRename";
 import { DyadDelete } from "./DyadDelete";
 import { DyadAddDependency } from "./DyadAddDependency";
 import { DyadExecuteSql } from "./DyadExecuteSql";
-import { DyadLogs } from "./DyadLogs";
-import { DyadGrep } from "./DyadGrep";
 import { DyadAddIntegration } from "./DyadAddIntegration";
 import { DyadEdit } from "./DyadEdit";
 import { DyadSearchReplace } from "./DyadSearchReplace";
@@ -20,7 +17,7 @@ import { isStreamingByIdAtom, selectedChatIdAtom } from "@/atoms/chatAtoms";
 import { CustomTagState } from "./stateTypes";
 import { DyadOutput } from "./DyadOutput";
 import { DyadProblemSummary } from "./DyadProblemSummary";
-import { ipc } from "@/ipc/types";
+import { IpcClient } from "@/ipc/ipc_client";
 import { DyadMcpToolCall } from "./DyadMcpToolCall";
 import { DyadMcpToolResult } from "./DyadMcpToolResult";
 import { DyadWebSearchResult } from "./DyadWebSearchResult";
@@ -29,47 +26,9 @@ import { DyadWebCrawl } from "./DyadWebCrawl";
 import { DyadCodeSearchResult } from "./DyadCodeSearchResult";
 import { DyadCodeSearch } from "./DyadCodeSearch";
 import { DyadRead } from "./DyadRead";
-import { DyadListFiles } from "./DyadListFiles";
-import { DyadDatabaseSchema } from "./DyadDatabaseSchema";
-import { DyadSupabaseTableSchema } from "./DyadSupabaseTableSchema";
-import { DyadSupabaseProjectInfo } from "./DyadSupabaseProjectInfo";
-import { DyadStatus } from "./DyadStatus";
 import { mapActionToButton } from "./ChatInput";
 import { SuggestedAction } from "@/lib/schemas";
 import { FixAllErrorsButton } from "./FixAllErrorsButton";
-import { unescapeXmlAttr, unescapeXmlContent } from "../../../shared/xmlEscape";
-
-const DYAD_CUSTOM_TAGS = [
-  "dyad-write",
-  "dyad-rename",
-  "dyad-delete",
-  "dyad-add-dependency",
-  "dyad-execute-sql",
-  "dyad-read-logs",
-  "dyad-add-integration",
-  "dyad-output",
-  "dyad-problem-report",
-  "dyad-chat-summary",
-  "dyad-edit",
-  "dyad-grep",
-  "dyad-search-replace",
-  "dyad-codebase-context",
-  "dyad-web-search-result",
-  "dyad-web-search",
-  "dyad-web-crawl",
-  "dyad-code-search-result",
-  "dyad-code-search",
-  "dyad-read",
-  "think",
-  "dyad-command",
-  "dyad-mcp-tool-call",
-  "dyad-mcp-tool-result",
-  "dyad-list-files",
-  "dyad-database-schema",
-  "dyad-supabase-table-schema",
-  "dyad-supabase-project-info",
-  "dyad-status",
-];
 
 interface DyadMarkdownParserProps {
   content: string;
@@ -100,7 +59,7 @@ const customLink = ({
       const url = props.href;
       if (url) {
         e.preventDefault();
-        ipc.system.openExternalUrl(url);
+        IpcClient.getInstance().openExternalUrl(url);
       }
     }}
   />
@@ -109,7 +68,6 @@ const customLink = ({
 export const VanillaMarkdownParser = ({ content }: { content: string }) => {
   return (
     <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
       components={{
         code: CodeHighlight,
         a: customLink,
@@ -168,7 +126,6 @@ export const DyadMarkdownParser: React.FC<DyadMarkdownParserProps> = ({
           {piece.type === "markdown"
             ? piece.content && (
                 <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
                   components={{
                     code: CodeHighlight,
                     a: customLink,
@@ -205,12 +162,35 @@ function preprocessUnclosedTags(content: string): {
   processedContent: string;
   inProgressTags: Map<string, Set<number>>;
 } {
+  const customTagNames = [
+    "dyad-write",
+    "dyad-rename",
+    "dyad-delete",
+    "dyad-add-dependency",
+    "dyad-execute-sql",
+    "dyad-add-integration",
+    "dyad-output",
+    "dyad-problem-report",
+    "dyad-chat-summary",
+    "dyad-edit",
+    "dyad-search-replace",
+    "dyad-codebase-context",
+    "dyad-web-search-result",
+    "dyad-web-search",
+    "dyad-web-crawl",
+    "dyad-read",
+    "think",
+    "dyad-command",
+    "dyad-mcp-tool-call",
+    "dyad-mcp-tool-result",
+  ];
+
   let processedContent = content;
   // Map to track which tags are in progress and their positions
   const inProgressTags = new Map<string, Set<number>>();
 
   // For each tag type, check if there are unclosed tags
-  for (const tagName of DYAD_CUSTOM_TAGS) {
+  for (const tagName of customTagNames) {
     // Count opening and closing tags
     const openTagPattern = new RegExp(`<${tagName}(?:\\s[^>]*)?>`, "g");
     const closeTagPattern = new RegExp(`</${tagName}>`, "g");
@@ -256,8 +236,33 @@ function preprocessUnclosedTags(content: string): {
 function parseCustomTags(content: string): ContentPiece[] {
   const { processedContent, inProgressTags } = preprocessUnclosedTags(content);
 
+  const customTagNames = [
+    "dyad-write",
+    "dyad-rename",
+    "dyad-delete",
+    "dyad-add-dependency",
+    "dyad-execute-sql",
+    "dyad-add-integration",
+    "dyad-output",
+    "dyad-problem-report",
+    "dyad-chat-summary",
+    "dyad-edit",
+    "dyad-search-replace",
+    "dyad-codebase-context",
+    "dyad-web-search-result",
+    "dyad-web-search",
+    "dyad-web-crawl",
+    "dyad-code-search-result",
+    "dyad-code-search",
+    "dyad-read",
+    "think",
+    "dyad-command",
+    "dyad-mcp-tool-call",
+    "dyad-mcp-tool-result",
+  ];
+
   const tagPattern = new RegExp(
-    `<(${DYAD_CUSTOM_TAGS.join("|")})\\s*([^>]*)>(.*?)<\\/\\1>`,
+    `<(${customTagNames.join("|")})\\s*([^>]*)>(.*?)<\\/\\1>`,
     "gs",
   );
 
@@ -278,25 +283,25 @@ function parseCustomTags(content: string): ContentPiece[] {
       });
     }
 
-    // Parse attributes and unescape values
+    // Parse attributes
     const attributes: Record<string, string> = {};
-    const attrPattern = /([\w-]+)="([^"]*)"/g;
+    const attrPattern = /(\w+)="([^"]*)"/g;
     let attrMatch;
     while ((attrMatch = attrPattern.exec(attributesStr)) !== null) {
-      attributes[attrMatch[1]] = unescapeXmlAttr(attrMatch[2]);
+      attributes[attrMatch[1]] = attrMatch[2];
     }
 
     // Check if this tag was marked as in progress
     const tagInProgressSet = inProgressTags.get(tag);
     const isInProgress = tagInProgressSet?.has(startIndex);
 
-    // Add the tag info with unescaped content
+    // Add the tag info
     contentPieces.push({
       type: "custom-tag",
       tagInfo: {
         tag,
         attributes,
-        content: unescapeXmlContent(tagContent),
+        content: tagContent,
         fullMatch,
         inProgress: isInProgress || false,
       },
@@ -355,10 +360,7 @@ function renderCustomTag(
       return (
         <DyadWebSearch
           node={{
-            properties: {
-              query: attributes.query || "",
-              state: getState({ isStreaming, inProgress }),
-            },
+            properties: {},
           }}
         >
           {content}
@@ -378,10 +380,7 @@ function renderCustomTag(
       return (
         <DyadCodeSearch
           node={{
-            properties: {
-              query: attributes.query || "",
-              state: getState({ isStreaming, inProgress }),
-            },
+            properties: {},
           }}
         >
           {content}
@@ -488,41 +487,6 @@ function renderCustomTag(
         >
           {content}
         </DyadExecuteSql>
-      );
-
-    case "dyad-read-logs":
-      return (
-        <DyadLogs
-          node={{
-            properties: {
-              state: getState({ isStreaming, inProgress }),
-              time: attributes.time || "",
-              type: attributes.type || "",
-              level: attributes.level || "",
-              count: attributes.count || "",
-            },
-          }}
-        >
-          {content}
-        </DyadLogs>
-      );
-
-    case "dyad-grep":
-      return (
-        <DyadGrep
-          node={{
-            properties: {
-              state: getState({ isStreaming, inProgress }),
-              query: attributes.query || "",
-              include: attributes.include || "",
-              exclude: attributes.exclude || "",
-              "case-sensitive": attributes["case-sensitive"] || "",
-              count: attributes.count || "",
-            },
-          }}
-        >
-          {content}
-        </DyadGrep>
       );
 
     case "dyad-add-integration":
@@ -639,75 +603,6 @@ function renderCustomTag(
         return <>{mapActionToButton(action)}</>;
       }
       return null;
-
-    case "dyad-list-files":
-      return (
-        <DyadListFiles
-          node={{
-            properties: {
-              directory: attributes.directory || "",
-              recursive: attributes.recursive || "",
-              state: getState({ isStreaming, inProgress }),
-            },
-          }}
-        >
-          {content}
-        </DyadListFiles>
-      );
-
-    case "dyad-database-schema":
-      return (
-        <DyadDatabaseSchema
-          node={{
-            properties: {
-              state: getState({ isStreaming, inProgress }),
-            },
-          }}
-        >
-          {content}
-        </DyadDatabaseSchema>
-      );
-
-    case "dyad-supabase-table-schema":
-      return (
-        <DyadSupabaseTableSchema
-          node={{
-            properties: {
-              table: attributes.table || "",
-              state: getState({ isStreaming, inProgress }),
-            },
-          }}
-        >
-          {content}
-        </DyadSupabaseTableSchema>
-      );
-
-    case "dyad-supabase-project-info":
-      return (
-        <DyadSupabaseProjectInfo
-          node={{
-            properties: {
-              state: getState({ isStreaming, inProgress }),
-            },
-          }}
-        >
-          {content}
-        </DyadSupabaseProjectInfo>
-      );
-
-    case "dyad-status":
-      return (
-        <DyadStatus
-          node={{
-            properties: {
-              title: attributes.title || "Processing...",
-              state: getState({ isStreaming, inProgress }),
-            },
-          }}
-        >
-          {content}
-        </DyadStatus>
-      );
 
     default:
       return null;

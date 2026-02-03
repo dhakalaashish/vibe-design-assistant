@@ -1,6 +1,6 @@
 import { db } from "../../db";
 import { mcpServers } from "../../db/schema";
-import { createMCPClient, type MCPClient } from "@ai-sdk/mcp";
+import { experimental_createMCPClient, experimental_MCPClient } from "ai";
 import { eq } from "drizzle-orm";
 
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -13,9 +13,9 @@ class McpManager {
     return this._instance;
   }
 
-  private clients = new Map<number, MCPClient>();
+  private clients = new Map<number, experimental_MCPClient>();
 
-  async getClient(serverId: number): Promise<MCPClient> {
+  async getClient(serverId: number): Promise<experimental_MCPClient> {
     const existing = this.clients.get(serverId);
     if (existing) return existing;
     const server = await db
@@ -36,16 +36,11 @@ class McpManager {
       });
     } else if (s.transport === "http") {
       if (!s.url) throw new Error("HTTP MCP requires url");
-      const headers = s.headersJson ?? {};
-      transport = new StreamableHTTPClientTransport(new URL(s.url as string), {
-        requestInit: {
-          headers,
-        },
-      });
+      transport = new StreamableHTTPClientTransport(new URL(s.url as string));
     } else {
       throw new Error(`Unsupported MCP transport: ${s.transport}`);
     }
-    const client = await createMCPClient({
+    const client = await experimental_createMCPClient({
       transport,
     });
     this.clients.set(serverId, client);

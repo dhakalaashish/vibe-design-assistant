@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ipc } from "@/ipc/types";
+import { IpcClient } from "@/ipc/ipc_client";
 
 export function useLoadAppFile(appId: number | null, filePath: string | null) {
   const [content, setContent] = useState<string | null>(null);
@@ -16,7 +16,8 @@ export function useLoadAppFile(appId: number | null, filePath: string | null) {
 
       setLoading(true);
       try {
-        const fileContent = await ipc.app.readAppFile({ appId, filePath });
+        const ipcClient = IpcClient.getInstance();
+        const fileContent = await ipcClient.readAppFile(appId, filePath);
 
         setContent(fileContent);
         setError(null);
@@ -42,7 +43,8 @@ export function useLoadAppFile(appId: number | null, filePath: string | null) {
 
     setLoading(true);
     try {
-      const fileContent = await ipc.app.readAppFile({ appId, filePath });
+      const ipcClient = IpcClient.getInstance();
+      const fileContent = await ipcClient.readAppFile(appId, filePath);
       setContent(fileContent);
       setError(null);
     } catch (error) {

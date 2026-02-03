@@ -1,5 +1,4 @@
-import { ipc } from "@/ipc/types";
-import { getAppPort } from "../../shared/ports";
+import { IpcClient } from "@/ipc/ipc_client";
 
 import { v4 as uuidv4 } from "uuid";
 
@@ -11,13 +10,13 @@ export async function neonTemplateHook({
   appName: string;
 }) {
   console.log("Creating Neon project");
-  const neonProject = await ipc.neon.createProject({
+  const neonProject = await IpcClient.getInstance().createNeonProject({
     name: appName,
     appId: appId,
   });
 
   console.log("Neon project created", neonProject);
-  await ipc.misc.setAppEnvVars({
+  await IpcClient.getInstance().setAppEnvVars({
     appId: appId,
     envVars: [
       {
@@ -30,7 +29,7 @@ export async function neonTemplateHook({
       },
       {
         key: "NEXT_PUBLIC_SERVER_URL",
-        value: `http://localhost:${getAppPort(appId)}`,
+        value: "http://localhost:32100",
       },
       {
         key: "GMAIL_USER",

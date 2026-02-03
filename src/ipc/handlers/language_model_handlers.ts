@@ -3,7 +3,7 @@ import type {
   LanguageModel,
   CreateCustomLanguageModelProviderParams,
   CreateCustomLanguageModelParams,
-} from "@/ipc/types";
+} from "@/ipc/ipc_types";
 import { createLoggedHandler } from "./safe_handle";
 import log from "electron-log";
 import {

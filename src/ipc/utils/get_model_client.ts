@@ -4,7 +4,8 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createXai } from "@ai-sdk/xai";
 import { createVertex as createGoogleVertex } from "@ai-sdk/google-vertex";
 import { createAzure } from "@ai-sdk/azure";
-import type { LanguageModel } from "ai";
+import { LanguageModelV2 } from "@ai-sdk/provider";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import type {
@@ -15,18 +16,10 @@ import type {
 } from "../../lib/schemas";
 import { getEnvVar } from "./read_env";
 import log from "electron-log";
-import {
-  FREE_OPENROUTER_MODEL_NAMES,
-  GEMINI_3_FLASH,
-  GPT_5_2_MODEL_NAME,
-  SONNET_4_5,
-} from "../shared/language_model_constants";
+import { FREE_OPENROUTER_MODEL_NAMES } from "../shared/language_model_constants";
 import { getLanguageModelProviders } from "../shared/language_model_helpers";
-import { LanguageModelProvider } from "@/ipc/types";
-import {
-  createDyadEngine,
-  type DyadEngineProvider,
-} from "./llm_engine_provider";
+import { LanguageModelProvider } from "../ipc_types";
+import { createDyadEngine } from "./llm_engine_provider";
 
 import { LM_STUDIO_BASE_URL } from "./lm_studio_utils";
 import { createOllamaProvider } from "./ollama_provider";
@@ -37,25 +30,25 @@ const dyadEngineUrl = process.env.DYAD_ENGINE_URL;
 
 const AUTO_MODELS = [
   {
-    provider: "openai",
-    name: GPT_5_2_MODEL_NAME,
+    provider: "google",
+    name: "gemini-2.5-flash",
+  },
+  {
+    provider: "openrouter",
+    name: "qwen/qwen3-coder:free",
   },
   {
     provider: "anthropic",
-    name: SONNET_4_5,
+    name: "claude-sonnet-4-20250514",
   },
   {
-    provider: "google",
-    name: GEMINI_3_FLASH,
-  },
-  {
-    provider: "google",
-    name: "gemini-2.5-flash",
+    provider: "openai",
+    name: "gpt-4.1",
   },
 ];
 
 export interface ModelClient {
-  model: LanguageModel;
+  model: LanguageModelV2;
   builtinProviderId?: string;
 }
 
@@ -91,6 +84,7 @@ export async function getModelClient(
       const provider = createDyadEngine({
         apiKey: dyadApiKey,
         baseURL: dyadEngineUrl ?? "https://engine.dyad.sh/v1",
+        originalProviderId: model.provider,
         dyadOptions: {
           enableLazyEdits:
             settings.selectedChatMode === "ask"
@@ -113,15 +107,13 @@ export async function getModelClient(
 
       // Do not use free variant (for openrouter).
       const modelName = model.name.split(":free")[0];
-      const proModelClient = getProModelClient({
-        model,
-        settings,
-        provider,
-        modelId: `${providerConfig.gatewayPrefix || ""}${modelName}`,
-      });
+      const autoModelClient = {
+        model: provider(`${providerConfig.gatewayPrefix || ""}${modelName}`),
+        builtinProviderId: model.provider,
+      };
 
       return {
-        modelClient: proModelClient,
+        modelClient: autoModelClient,
         isEngineEnabled: true,
         isSmartContextEnabled: enableSmartFilesContext,
       };
@@ -188,54 +180,6 @@ export async function getModelClient(
     );
   }
   return getRegularModelClient(model, settings, providerConfig);
-}
-
-function getProModelClient({
-  model,
-  settings,
-  provider,
-  modelId,
-}: {
-  model: LargeLanguageModel;
-  settings: UserSettings;
-  provider: DyadEngineProvider;
-  modelId: string;
-}): ModelClient {
-  if (
-    settings.selectedChatMode === "local-agent" &&
-    model.provider === "auto" &&
-    model.name === "auto"
-  ) {
-    return {
-      // We need to do the fallback here (and not server-side)
-      // because GPT-5* models need to use responses API to get
-      // full functionality (e.g. thinking summaries).
-      model: createFallback({
-        models: [
-          // openai requires no prefix.
-          provider.responses(`${GPT_5_2_MODEL_NAME}`, { providerId: "openai" }),
-          provider(`anthropic/${SONNET_4_5}`, { providerId: "anthropic" }),
-          provider(`gemini/${GEMINI_3_FLASH}`, { providerId: "google" }),
-        ],
-      }),
-      // Using openAI as the default provider.
-      // TODO: we should remove this and rely on the provider id passed into the provider().
-      builtinProviderId: "openai",
-    };
-  }
-  if (
-    settings.selectedChatMode === "local-agent" &&
-    model.provider === "openai"
-  ) {
-    return {
-      model: provider.responses(modelId, { providerId: model.provider }),
-      builtinProviderId: model.provider,
-    };
-  }
-  return {
-    model: provider(modelId, { providerId: model.provider }),
-    builtinProviderId: model.provider,
-  };
 }
 
 function getRegularModelClient(
@@ -336,11 +280,7 @@ function getRegularModelClient(
       };
     }
     case "openrouter": {
-      const provider = createOpenAICompatible({
-        name: "openrouter",
-        baseURL: "https://openrouter.ai/api/v1",
-        apiKey,
-      });
+      const provider = createOpenRouter({ apiKey });
       return {
         modelClient: {
           model: provider(model.name),

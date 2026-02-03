@@ -1,1 +1,0 @@
-ALTER TABLE `messages` ADD `using_free_agent_mode_quota` integer;

@@ -8,18 +8,17 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ipc } from "@/ipc/types";
+import { IpcClient } from "@/ipc/ipc_client";
 import { useMutation } from "@tanstack/react-query";
 import { showError, showSuccess } from "@/lib/toast";
 import { Folder, X, Loader2, Info } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@radix-ui/react-label";
 import { useNavigate } from "@tanstack/react-router";
 import { useStreamChat } from "@/hooks/useStreamChat";
-import type { GithubRepository } from "@/ipc/types";
+import type { GithubRepository } from "@/ipc/ipc_types";
 import {
   Tooltip,
   TooltipContent,
@@ -53,7 +52,6 @@ export function ImportAppDialog({ isOpen, onClose }: ImportAppDialogProps) {
   const [isCheckingName, setIsCheckingName] = useState<boolean>(false);
   const [installCommand, setInstallCommand] = useState("");
   const [startCommand, setStartCommand] = useState("");
-  const [copyToDyadApps, setCopyToDyadApps] = useState(true);
   const navigate = useNavigate();
   const { streamMessage } = useStreamChat({ hasChatId: false });
   const { refreshApps } = useLoadApps();
@@ -80,17 +78,10 @@ export function ImportAppDialog({ isOpen, onClose }: ImportAppDialogProps) {
     }
   }, [isOpen, isAuthenticated]);
 
-  // Re-check app name when copyToDyadApps changes
-  useEffect(() => {
-    if (customAppName.trim() && selectedPath) {
-      checkAppName({ name: customAppName, skipCopy: !copyToDyadApps });
-    }
-  }, [copyToDyadApps]);
-
   const fetchRepos = async () => {
     setLoading(true);
     try {
-      const fetchedRepos = await ipc.github.listRepos();
+      const fetchedRepos = await IpcClient.getInstance().listGithubRepos();
       setRepos(fetchedRepos);
     } catch (err: unknown) {
       showError("Failed to fetch repositories.: " + (err as any).toString());
@@ -105,7 +96,7 @@ export function ImportAppDialog({ isOpen, onClose }: ImportAppDialogProps) {
       setGithubAppName(repoName);
       setIsCheckingGithubName(true);
       try {
-        const result = await ipc.import.checkAppName({
+        const result = await IpcClient.getInstance().checkAppName({
           appName: repoName,
         });
         setGithubNameExists(result.exists);
@@ -126,7 +117,7 @@ export function ImportAppDialog({ isOpen, onClose }: ImportAppDialogProps) {
       const match = extractRepoNameFromUrl(url);
       const repoName = match ? match[2] : "";
       const appName = githubAppName.trim() || repoName;
-      const result = await ipc.github.cloneRepoFromUrl({
+      const result = await IpcClient.getInstance().cloneRepoFromUrl({
         url,
         installCommand: installCommand.trim() || undefined,
         startCommand: startCommand.trim() || undefined,
@@ -139,7 +130,7 @@ export function ImportAppDialog({ isOpen, onClose }: ImportAppDialogProps) {
       }
       setSelectedAppId(result.app.id);
       showSuccess(`Successfully imported ${result.app.name}`);
-      const chatId = await ipc.chat.createChat(result.app.id);
+      const chatId = await IpcClient.getInstance().createChat(result.app.id);
       navigate({ to: "/chat", search: { id: chatId } });
       if (!result.hasAiRules) {
         streamMessage({
@@ -160,7 +151,7 @@ export function ImportAppDialog({ isOpen, onClose }: ImportAppDialogProps) {
 
     try {
       const appName = githubAppName.trim() || repo.name;
-      const result = await ipc.github.cloneRepoFromUrl({
+      const result = await IpcClient.getInstance().cloneRepoFromUrl({
         url: `https://github.com/${repo.full_name}.git`,
         installCommand: installCommand.trim() || undefined,
         startCommand: startCommand.trim() || undefined,
@@ -173,7 +164,7 @@ export function ImportAppDialog({ isOpen, onClose }: ImportAppDialogProps) {
       }
       setSelectedAppId(result.app.id);
       showSuccess(`Successfully imported ${result.app.name}`);
-      const chatId = await ipc.chat.createChat(result.app.id);
+      const chatId = await IpcClient.getInstance().createChat(result.app.id);
       navigate({ to: "/chat", search: { id: chatId } });
       if (!result.hasAiRules) {
         streamMessage({
@@ -197,7 +188,7 @@ export function ImportAppDialog({ isOpen, onClose }: ImportAppDialogProps) {
     if (newName.trim()) {
       setIsCheckingGithubName(true);
       try {
-        const result = await ipc.import.checkAppName({
+        const result = await IpcClient.getInstance().checkAppName({
           appName: newName,
         });
         setGithubNameExists(result.exists);
@@ -209,18 +200,11 @@ export function ImportAppDialog({ isOpen, onClose }: ImportAppDialogProps) {
     }
   };
 
-  const checkAppName = async ({
-    name,
-    skipCopy,
-  }: {
-    name: string;
-    skipCopy?: boolean;
-  }): Promise<void> => {
+  const checkAppName = async (name: string): Promise<void> => {
     setIsCheckingName(true);
     try {
-      const result = await ipc.import.checkAppName({
+      const result = await IpcClient.getInstance().checkAppName({
         appName: name,
-        skipCopy,
       });
       setNameExists(result.exists);
     } catch (error: unknown) {
@@ -231,12 +215,11 @@ export function ImportAppDialog({ isOpen, onClose }: ImportAppDialogProps) {
   };
   const selectFolderMutation = useMutation({
     mutationFn: async () => {
-      const result = await ipc.system.selectAppFolder();
+      const result = await IpcClient.getInstance().selectAppFolder();
       if (!result.path || !result.name) {
-        // User cancelled the folder selection dialog
-        return null;
+        throw new Error("No folder selected");
       }
-      const aiRulesCheck = await ipc.import.checkAiRules({
+      const aiRulesCheck = await IpcClient.getInstance().checkAiRules({
         path: result.path,
       });
       setHasAiRules(aiRulesCheck.exists);
@@ -244,7 +227,7 @@ export function ImportAppDialog({ isOpen, onClose }: ImportAppDialogProps) {
       // Use the folder name from the IPC response
       setCustomAppName(result.name);
       // Check if the app name already exists
-      await checkAppName({ name: result.name, skipCopy: !copyToDyadApps });
+      await checkAppName(result.name);
       return result;
     },
     onError: (error: Error) => {
@@ -255,12 +238,11 @@ export function ImportAppDialog({ isOpen, onClose }: ImportAppDialogProps) {
   const importAppMutation = useMutation({
     mutationFn: async () => {
       if (!selectedPath) throw new Error("No folder selected");
-      return ipc.import.importApp({
+      return IpcClient.getInstance().importApp({
         path: selectedPath,
         appName: customAppName,
         installCommand: installCommand || undefined,
         startCommand: startCommand || undefined,
-        skipCopy: !copyToDyadApps,
       });
     },
     onSuccess: async (result) => {
@@ -301,7 +283,6 @@ export function ImportAppDialog({ isOpen, onClose }: ImportAppDialogProps) {
     setNameExists(false);
     setInstallCommand("");
     setStartCommand("");
-    setCopyToDyadApps(true);
   };
 
   const handleAppNameChange = async (
@@ -310,7 +291,7 @@ export function ImportAppDialog({ isOpen, onClose }: ImportAppDialogProps) {
     const newName = e.target.value;
     setCustomAppName(newName);
     if (newName.trim()) {
-      await checkAppName({ name: newName, skipCopy: !copyToDyadApps });
+      await checkAppName(newName);
     }
   };
 
@@ -397,27 +378,6 @@ export function ImportAppDialog({ isOpen, onClose }: ImportAppDialogProps) {
                           <span className="sr-only">Clear selection</span>
                         </Button>
                       </div>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id="copy-to-dyad-apps"
-                        checked={copyToDyadApps}
-                        onCheckedChange={(checked) =>
-                          setCopyToDyadApps(checked === true)
-                        }
-                        disabled={importAppMutation.isPending}
-                      />
-                      <label
-                        htmlFor="copy-to-dyad-apps"
-                        className="text-xs sm:text-sm cursor-pointer"
-                      >
-                        Copy to the{" "}
-                        <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                          dyad-apps
-                        </code>{" "}
-                        folder
-                      </label>
                     </div>
 
                     <div className="space-y-2">

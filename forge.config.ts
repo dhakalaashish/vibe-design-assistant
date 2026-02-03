@@ -1,16 +1,12 @@
-import { windowsSign } from "./windowsSign";
 import type { ForgeConfig } from "@electron-forge/shared-types";
 import { MakerSquirrel } from "@electron-forge/maker-squirrel";
 import { MakerZIP } from "@electron-forge/maker-zip";
 import { MakerDeb } from "@electron-forge/maker-deb";
 import { MakerRpm } from "@electron-forge/maker-rpm";
-import { MakerAppImage } from "./makers/MakerAppImage";
 import { VitePlugin } from "@electron-forge/plugin-vite";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
 import { AutoUnpackNativesPlugin } from "@electron-forge/plugin-auto-unpack-natives";
-
-console.log("AZURE_CODE_SIGNING_DLIB", process.env.AZURE_CODE_SIGNING_DLIB);
 
 // Based on https://github.com/electron/forge/blob/6b2d547a7216c30fde1e1fddd1118eee5d872945/packages/plugin/vite/src/VitePlugin.ts#L124
 const ignore = (file: string) => {
@@ -36,9 +32,6 @@ const ignore = (file: string) => {
   if (file.startsWith("/node_modules/stacktrace-js/dist")) {
     return false;
   }
-  if (file.startsWith("/node_modules/html-to-image")) {
-    return false;
-  }
   if (file.startsWith("/node_modules/better-sqlite3")) {
     return false;
   }
@@ -56,11 +49,9 @@ const ignore = (file: string) => {
 };
 
 const isEndToEndTestBuild = process.env.E2E_TEST_BUILD === "true";
-const isGitHubActions = process.env.GITHUB_ACTIONS === "true";
 
 const config: ForgeConfig = {
   packagerConfig: {
-    windowsSign: isGitHubActions ? windowsSign : undefined,
     protocols: [
       {
         name: "Dyad",
@@ -83,7 +74,6 @@ const config: ForgeConfig = {
         },
     asar: true,
     ignore,
-    extraResource: ["node_modules/dugite/git", "node_modules/@vscode"],
     // ignore: [/node_modules\/(?!(better-sqlite3|bindings|file-uri-to-path)\/)/],
   },
   rebuildConfig: {
@@ -91,35 +81,15 @@ const config: ForgeConfig = {
     force: true,
   },
   makers: [
-    new MakerSquirrel(
-      // @ts-expect-error - incorrect types exported by MakerSquirrel
-      isGitHubActions
-        ? {
-            windowsSign,
-            iconUrl:
-              "https://raw.githubusercontent.com/dyad-sh/dyad/main/assets/icon/logo.ico",
-            setupIcon: "./assets/icon/logo.ico",
-          }
-        : {
-            iconUrl:
-              "https://raw.githubusercontent.com/dyad-sh/dyad/main/assets/icon/logo.ico",
-            setupIcon: "./assets/icon/logo.ico",
-          },
-    ),
-    new MakerZIP({}, ["darwin"]),
-    new MakerRpm({
-      options: {
-        icon: "./assets/icon/logo.png",
-      },
+    new MakerSquirrel({
+      signWithParams: `/sha1 ${process.env.SM_CODE_SIGNING_CERT_SHA1_HASH} /tr http://timestamp.digicert.com /td SHA256 /fd SHA256`,
     }),
+    new MakerZIP({}, ["darwin"]),
+    new MakerRpm({}),
     new MakerDeb({
       options: {
         mimeType: ["x-scheme-handler/dyad"],
-        icon: "./assets/icon/logo.png",
       },
-    }),
-    new MakerAppImage({
-      icon: "./assets/icon/logo.png",
     }),
   ],
   publishers: [

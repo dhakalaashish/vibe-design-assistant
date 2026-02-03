@@ -7,10 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Database, GitBranch } from "lucide-react";
 import { selectedAppIdAtom } from "@/atoms/appAtoms";
 import { useLoadApp } from "@/hooks/useLoadApp";
-import { ipc } from "@/ipc/types";
-import type { GetNeonProjectResponse, NeonBranch } from "@/ipc/types";
+import { IpcClient } from "@/ipc/ipc_client";
+import type { GetNeonProjectResponse, NeonBranch } from "@/ipc/ipc_types";
 import { NeonDisconnectButton } from "@/components/NeonDisconnectButton";
-import { queryKeys } from "@/lib/queryKeys";
 
 const getBranchTypeColor = (type: NeonBranch["type"]) => {
   switch (type) {
@@ -41,10 +40,11 @@ export const NeonConfigure = () => {
     isLoading,
     error,
   } = useQuery<GetNeonProjectResponse, Error>({
-    queryKey: queryKeys.neon.project({ appId: selectedAppId }),
+    queryKey: ["neon-project", selectedAppId],
     queryFn: async () => {
       if (!selectedAppId) throw new Error("No app selected");
-      return await ipc.neon.getProject({ appId: selectedAppId });
+      const ipcClient = IpcClient.getInstance();
+      return await ipcClient.getNeonProject({ appId: selectedAppId });
     },
     enabled: !!selectedAppId && !!app?.neonProjectId,
     meta: { showErrorToast: true },

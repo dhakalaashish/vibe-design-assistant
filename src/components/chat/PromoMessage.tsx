@@ -1,4 +1,4 @@
-import { ipc } from "@/ipc/types";
+import { IpcClient } from "@/ipc/ipc_client";
 import React from "react";
 
 // Types for the message system
@@ -36,7 +36,7 @@ export function Message({ spans }: MessageConfig) {
                   if (span.action) {
                     span.action();
                   } else if (span.url) {
-                    ipc.system.openExternalUrl(span.url);
+                    IpcClient.getInstance().openExternalUrl(span.url);
                   }
                 }}
                 className="text-blue-600 hover:text-blue-800 underline cursor-pointer"
@@ -63,7 +63,7 @@ export const TURBO_EDITS_PROMO_MESSAGE: MessageConfig = {
 
 export const SMART_CONTEXT_PROMO_MESSAGE: MessageConfig = {
   spans: [
-    { type: "text", content: "Save up to 3x on AI costs with " },
+    { type: "text", content: "Save up to 5x on AI costs with " },
     {
       type: "link",
       content: "Dyad Pro's Smart Context",

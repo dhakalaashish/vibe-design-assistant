@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { ipc, type ProblemReport } from "@/ipc/types";
+import { IpcClient } from "@/ipc/ipc_client";
+import type { ProblemReport } from "@/ipc/ipc_types";
 import { useSettings } from "./useSettings";
-import { queryKeys } from "@/lib/queryKeys";
 
 export function useCheckProblems(appId: number | null) {
   const { settings } = useSettings();
@@ -11,12 +11,13 @@ export function useCheckProblems(appId: number | null) {
     error,
     refetch: checkProblems,
   } = useQuery<ProblemReport, Error>({
-    queryKey: queryKeys.problems.byApp({ appId }),
+    queryKey: ["problems", appId],
     queryFn: async (): Promise<ProblemReport> => {
       if (!appId) {
         throw new Error("App ID is required");
       }
-      return ipc.misc.checkProblems({ appId });
+      const ipcClient = IpcClient.getInstance();
+      return ipcClient.checkProblems({ appId });
     },
     enabled: !!appId && settings?.enableAutoFixProblems,
     // DO NOT SHOW ERROR TOAST.

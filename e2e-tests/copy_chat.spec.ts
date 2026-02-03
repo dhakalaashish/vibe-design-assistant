@@ -48,8 +48,7 @@ test("copy message content - dyad-write conversion", async ({ po }) => {
   expect(clipboardContent).not.toContain("<dyad-write");
 });
 
-// This test is flaky.
-test.skip("copy button tooltip states", async ({ po }) => {
+test("copy button tooltip states", async ({ po }) => {
   await po.setUp({ autoApprove: true });
   await po.importApp("minimal");
 

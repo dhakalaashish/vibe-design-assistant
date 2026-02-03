@@ -5,18 +5,10 @@ on:
     branches:
       - main
   pull_request:
-    types: [opened, synchronize, reopened, closed]
-  workflow_dispatch:
-    inputs:
-      pr_number:
-        description: "PR number for CI re-run (used by pr-review-responder)"
-        required: true
-        type: string
+    types: [opened, synchronize, reopened]
 
 concurrency:
-  # Use PR number for pull_request/workflow_dispatch events to enable proper per-PR cancellation
-  # For workflow_dispatch, inputs.pr_number ensures different PRs don't cancel each other
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || inputs.pr_number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 defaults:
@@ -24,87 +16,7 @@ defaults:
     shell: bash
 
 jobs:
-  check-changes:
-    # Skip closed PR events (we only listen to 'closed' to trigger cancellation of in-progress runs)
-    if: github.event.action != 'closed'
-    runs-on: ubuntu-latest
-    outputs:
-      should_run_tests: ${{ steps.check.outputs.should_run_tests }}
-      pr_head_ref: ${{ steps.pr-info.outputs.head_ref }}
-      pr_head_repo: ${{ steps.pr-info.outputs.head_repo }}
-    steps:
-      - name: Get PR info for workflow_dispatch
-        if: github.event_name == 'workflow_dispatch' && inputs.pr_number != ''
-        id: pr-info
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PR_DATA=$(gh pr view "${{ inputs.pr_number }}" --repo "${{ github.repository }}" --json headRefName,headRepository,headRepositoryOwner) || {
-            echo "::error::Failed to fetch PR info for PR #${{ inputs.pr_number }}"
-            exit 1
-          }
-          echo "head_ref=$(echo "$PR_DATA" | jq -r '.headRefName')" >> $GITHUB_OUTPUT
-          echo "head_repo=$(echo "$PR_DATA" | jq -r '.headRepositoryOwner.login + "/" + .headRepository.name')" >> $GITHUB_OUTPUT
-
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ steps.pr-info.outputs.head_repo || github.event.pull_request.head.repo.full_name || github.repository }}
-          ref: ${{ steps.pr-info.outputs.head_ref || github.event.pull_request.head.ref || '' }}
-          fetch-depth: 0
-      - name: Check if only .claude files changed
-        id: check
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            # Always run tests for manual workflow dispatch (e.g., from pr-review-responder)
-            echo "should_run_tests=true" >> $GITHUB_OUTPUT
-            echo "Running tests: manual workflow dispatch"
-            exit 0
-          fi
-
-          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            # Always run tests on pushes to main
-            echo "should_run_tests=true" >> $GITHUB_OUTPUT
-            echo "Running tests: push to main branch"
-            exit 0
-          fi
-
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            BASE_SHA="${{ github.event.pull_request.base.sha }}"
-            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-          else
-            # For push events, compare with parent commit
-            BASE_SHA="${{ github.event.before }}"
-            HEAD_SHA="${{ github.sha }}"
-          fi
-
-          # Get list of changed files
-          CHANGED_FILES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" 2>/dev/null || echo "")
-
-          if [ -z "$CHANGED_FILES" ]; then
-            echo "should_run_tests=true" >> $GITHUB_OUTPUT
-            echo "Running tests: could not determine changed files"
-            exit 0
-          fi
-
-          echo "Changed files:"
-          echo "$CHANGED_FILES"
-
-          # Check if all changed files are in .claude directory
-          NON_CLAUDE_FILES=$(echo "$CHANGED_FILES" | grep -v "^\.claude/" || true)
-
-          if [ -z "$NON_CLAUDE_FILES" ]; then
-            echo "should_run_tests=false" >> $GITHUB_OUTPUT
-            echo "Skipping tests: all changed files are in .claude/"
-          else
-            echo "should_run_tests=true" >> $GITHUB_OUTPUT
-            echo "Running tests: found non-.claude files:"
-            echo "$NON_CLAUDE_FILES"
-          fi
-
   test:
-    needs: [check-changes]
-    if: needs.check-changes.outputs.should_run_tests == 'true'
     # Why Mac and Windows?
     # I can't run electron playwright on ubuntu-latest and
     # Linux support for Dyad is experimental so not as important
@@ -118,17 +30,12 @@ jobs:
             { name: "windows", image: "windows-latest" },
             { name: "macos", image: "macos-latest" },
           ]
-        # If you update this, you need to update
-        # scripts/generate-playwright-summary.js
         shard: [1, 2, 3, 4]
         shardTotal: [4]
     runs-on: ${{ matrix.os.image }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          repository: ${{ needs.check-changes.outputs.pr_head_repo || github.event.pull_request.head.repo.full_name || github.repository }}
-          ref: ${{ needs.check-changes.outputs.pr_head_ref || github.event.pull_request.head.ref || '' }}
       - name: Initialize environment
         uses: actions/setup-node@v4
         with:
@@ -137,9 +44,6 @@ jobs:
           cache-dependency-path: package-lock.json
       - name: Install node modules
         run: npm ci --no-audit --no-fund --progress=false
-        env:
-          # Required for @vscode/ripgrep to download binaries without hitting GitHub API rate limits
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Presubmit check (e.g. lint, format)
         # do not run this on Windows (it fails and not necessary)
         # Only run on shard 1 to avoid redundant execution
@@ -201,28 +105,17 @@ jobs:
 
   merge-reports:
     # Merge reports after playwright-tests, even if some shards have failed
-    # Skip if tests were skipped (only .claude files changed)
-    if: ${{ !cancelled() && needs.check-changes.outputs.should_run_tests == 'true' }}
-    needs: [check-changes, test]
-    permissions:
-      contents: read
-      pull-requests: write
-      actions: read
+    if: ${{ !cancelled() }}
+    needs: [test]
 
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          repository: ${{ needs.check-changes.outputs.pr_head_repo || github.event.pull_request.head.repo.full_name || github.repository }}
-          ref: ${{ needs.check-changes.outputs.pr_head_ref || github.event.pull_request.head.ref || '' }}
       - uses: actions/setup-node@v4
         with:
           node-version: lts/*
       - name: Install dependencies
         run: npm ci --no-audit --no-fund --progress=false
-        env:
-          # Required for @vscode/ripgrep to download binaries without hitting GitHub API rate limits
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download blob reports from GitHub Actions Artifacts
         uses: actions/download-artifact@v4
@@ -254,14 +147,3 @@ jobs:
           name: html-report--attempt-${{ github.run_attempt }}
           path: playwright-report
           retention-days: 3
-
-      - name: Generate Playwright summary
-        uses: actions/github-script@v7
-        env:
-          PLAYWRIGHT_RUN_ID: ${{ github.run_id }}
-          # Pass PR number for workflow_dispatch triggers (from pr-review-responder)
-          PR_NUMBER: ${{ inputs.pr_number }}
-        with:
-          script: |
-            const { run } = require('./scripts/generate-playwright-summary.js');
-            await run({ github, context, core });

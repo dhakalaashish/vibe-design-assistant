@@ -1,10 +1,10 @@
-import type { Message } from "@/ipc/types";
+import type { Message } from "@/ipc/ipc_types";
 import {
   DyadMarkdownParser,
   VanillaMarkdownParser,
 } from "./DyadMarkdownParser";
+import { motion } from "framer-motion";
 import { useStreamChat } from "@/hooks/useStreamChat";
-import { StreamingLoadingAnimation } from "./StreamingLoadingAnimation";
 import {
   CheckCircle,
   XCircle,
@@ -13,7 +13,6 @@ import {
   Copy,
   Check,
   Info,
-  Bot,
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { useVersions } from "@/hooks/useVersions";
@@ -86,7 +85,9 @@ const ChatMessage = ({ message, isLastMessage }: ChatMessageProps) => {
 
   return (
     <div
-      className={`flex ${message.role === "assistant" ? "justify-start" : "justify-end"}`}
+      className={`flex ${
+        message.role === "assistant" ? "justify-start" : "justify-end"
+      }`}
     >
       <div className={`mt-2 w-full max-w-3xl mx-auto group`}>
         <div
@@ -98,7 +99,40 @@ const ChatMessage = ({ message, isLastMessage }: ChatMessageProps) => {
           !message.content &&
           isStreaming &&
           isLastMessage ? (
-            <StreamingLoadingAnimation variant="initial" />
+            <div className="flex h-6 items-center space-x-2 p-2">
+              <motion.div
+                className="h-3 w-3 rounded-full bg-(--primary) dark:bg-blue-500"
+                animate={{ y: [0, -12, 0] }}
+                transition={{
+                  repeat: Number.POSITIVE_INFINITY,
+                  duration: 0.4,
+                  ease: "easeOut",
+                  repeatDelay: 1.2,
+                }}
+              />
+              <motion.div
+                className="h-3 w-3 rounded-full bg-(--primary) dark:bg-blue-500"
+                animate={{ y: [0, -12, 0] }}
+                transition={{
+                  repeat: Number.POSITIVE_INFINITY,
+                  duration: 0.4,
+                  ease: "easeOut",
+                  delay: 0.4,
+                  repeatDelay: 1.2,
+                }}
+              />
+              <motion.div
+                className="h-3 w-3 rounded-full bg-(--primary) dark:bg-blue-500"
+                animate={{ y: [0, -12, 0] }}
+                transition={{
+                  repeat: Number.POSITIVE_INFINITY,
+                  duration: 0.4,
+                  ease: "easeOut",
+                  delay: 0.8,
+                  repeatDelay: 1.2,
+                }}
+              />
+            </div>
           ) : (
             <div
               className="prose dark:prose-invert prose-headings:mb-2 prose-p:my-1 prose-pre:my-0 max-w-none break-words"
@@ -108,7 +142,11 @@ const ChatMessage = ({ message, isLastMessage }: ChatMessageProps) => {
                 <>
                   <DyadMarkdownParser content={message.content} />
                   {isLastMessage && isStreaming && (
-                    <StreamingLoadingAnimation variant="streaming" />
+                    <div className="mt-4 ml-4 relative w-5 h-5 animate-spin">
+                      <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-(--primary) dark:bg-blue-500 rounded-full"></div>
+                      <div className="absolute bottom-0 left-0 w-2 h-2 bg-(--primary) dark:bg-blue-500 rounded-full opacity-80"></div>
+                      <div className="absolute bottom-0 right-0 w-2 h-2 bg-(--primary) dark:bg-blue-500 rounded-full opacity-60"></div>
+                    </div>
                   )}
                 </>
               ) : (
@@ -120,7 +158,10 @@ const ChatMessage = ({ message, isLastMessage }: ChatMessageProps) => {
           message.approvalState ? (
             <div
               className={`mt-2 flex items-center ${
-                message.role === "assistant" && message.content && !isStreaming
+                message.role === "assistant" &&
+                message.content &&
+                !isStreaming &&
+                message.approvalState
                   ? "justify-between"
                   : ""
               } text-xs`}
@@ -150,29 +191,21 @@ const ChatMessage = ({ message, isLastMessage }: ChatMessageProps) => {
                     </Tooltip>
                   </TooltipProvider>
                 )}
-              <div className="flex flex-wrap gap-2">
-                {message.approvalState && (
-                  <div className="flex items-center space-x-1">
-                    {message.approvalState === "approved" ? (
-                      <>
-                        <CheckCircle className="h-4 w-4 text-green-500" />
-                        <span>Approved</span>
-                      </>
-                    ) : message.approvalState === "rejected" ? (
-                      <>
-                        <XCircle className="h-4 w-4 text-red-500" />
-                        <span>Rejected</span>
-                      </>
-                    ) : null}
-                  </div>
-                )}
-                {message.role === "assistant" && message.model && (
-                  <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400 w-full sm:w-auto">
-                    <Bot className="h-4 w-4 flex-shrink-0" />
-                    <span>{message.model}</span>
-                  </div>
-                )}
-              </div>
+              {message.approvalState && (
+                <div className="flex items-center space-x-1">
+                  {message.approvalState === "approved" ? (
+                    <>
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                      <span>Approved</span>
+                    </>
+                  ) : message.approvalState === "rejected" ? (
+                    <>
+                      <XCircle className="h-4 w-4 text-red-500" />
+                      <span>Rejected</span>
+                    </>
+                  ) : null}
+                </div>
+              )}
             </div>
           ) : null}
         </div>

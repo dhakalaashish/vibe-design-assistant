@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ipc, type VercelDeployment } from "@/ipc/types";
-import { queryKeys } from "@/lib/queryKeys";
+import { IpcClient } from "@/ipc/ipc_client";
+import { VercelDeployment } from "@/ipc/ipc_types";
 
 export function useVercelDeployments(appId: number) {
   const queryClient = useQueryClient();
@@ -11,22 +11,22 @@ export function useVercelDeployments(appId: number) {
     error,
     refetch,
   } = useQuery<VercelDeployment[], Error>({
-    queryKey: queryKeys.vercel.deployments({ appId }),
+    queryKey: ["vercel-deployments", appId],
     queryFn: async () => {
-      return ipc.vercel.getDeployments({ appId });
+      const ipcClient = IpcClient.getInstance();
+      return ipcClient.getVercelDeployments({ appId });
     },
     // enabled: false, // Don't auto-fetch, only fetch when explicitly requested
   });
 
   const disconnectProjectMutation = useMutation<void, Error, void>({
     mutationFn: async () => {
-      return ipc.vercel.disconnect({ appId });
+      const ipcClient = IpcClient.getInstance();
+      return ipcClient.disconnectVercelProject({ appId });
     },
     onSuccess: () => {
       // Clear deployments cache when project is disconnected
-      queryClient.removeQueries({
-        queryKey: queryKeys.vercel.deployments({ appId }),
-      });
+      queryClient.removeQueries({ queryKey: ["vercel-deployments", appId] });
     },
   });
 

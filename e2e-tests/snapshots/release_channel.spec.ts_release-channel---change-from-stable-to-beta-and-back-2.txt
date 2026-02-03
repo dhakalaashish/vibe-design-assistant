@@ -1,2 +1,20 @@
-- "releaseChannel": "beta"
-+ "releaseChannel": "stable"
+{
+  "selectedModel": {
+    "name": "auto",
+    "provider": "auto"
+  },
+  "providerSettings": {},
+  "telemetryConsent": "unset",
+  "telemetryUserId": "[UUID]",
+  "hasRunBefore": true,
+  "experiments": {},
+  "lastShownReleaseNotesVersion": "[scrubbed]",
+  "enableProLazyEditsMode": true,
+  "enableProSmartFilesContextMode": true,
+  "selectedTemplateId": "react",
+  "selectedChatMode": "build",
+  "enableAutoFixProblems": false,
+  "enableAutoUpdate": true,
+  "releaseChannel": "stable",
+  "isTestMode": true
+}

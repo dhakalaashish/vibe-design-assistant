@@ -4,34 +4,25 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 // We might need a Supabase icon here, but for now, let's use a generic one or text.
 // import { Supabase } from "lucide-react"; // Placeholder
-import { DatabaseZap, Trash2 } from "lucide-react"; // Using DatabaseZap as a placeholder
+import { DatabaseZap } from "lucide-react"; // Using DatabaseZap as a placeholder
 import { useSettings } from "@/hooks/useSettings";
-import { useSupabase } from "@/hooks/useSupabase";
 import { showSuccess, showError } from "@/lib/toast";
-import { isSupabaseConnected } from "@/lib/schemas";
 
 export function SupabaseIntegration() {
   const { settings, updateSettings } = useSettings();
   const [isDisconnecting, setIsDisconnecting] = useState(false);
 
-  // Check if there are any connected organizations
-  const isConnected = isSupabaseConnected(settings);
-
-  const { organizations, refetchOrganizations, deleteOrganization } =
-    useSupabase();
-
-  const handleDisconnectAllFromSupabase = async () => {
+  const handleDisconnectFromSupabase = async () => {
     setIsDisconnecting(true);
     try {
-      // Clear the entire supabase object in settings (including all organizations)
+      // Clear the entire supabase object in settings
       const result = await updateSettings({
         supabase: undefined,
         // Also disable the migration setting on disconnect
         enableSupabaseWriteSqlMigration: false,
       });
       if (result) {
-        showSuccess("Successfully disconnected all Supabase organizations");
-        await refetchOrganizations();
+        showSuccess("Successfully disconnected from Supabase");
       } else {
         showError("Failed to disconnect from Supabase");
       }
@@ -41,15 +32,6 @@ export function SupabaseIntegration() {
       );
     } finally {
       setIsDisconnecting(false);
-    }
-  };
-
-  const handleDeleteOrganization = async (organizationSlug: string) => {
-    try {
-      await deleteOrganization({ organizationSlug });
-      showSuccess("Organization disconnected successfully");
-    } catch (err: any) {
-      showError(err.message || "Failed to disconnect organization");
     }
   };
 
@@ -64,16 +46,8 @@ export function SupabaseIntegration() {
     }
   };
 
-  const handleSkipPruneSettingChange = async (enabled: boolean) => {
-    try {
-      await updateSettings({
-        skipPruneEdgeFunctions: enabled,
-      });
-      showSuccess("Setting updated");
-    } catch (err: any) {
-      showError(err.message || "Failed to update setting");
-    }
-  };
+  // Check if there's any Supabase accessToken to determine connection status
+  const isConnected = !!settings?.supabase?.accessToken;
 
   if (!isConnected) {
     return null;
@@ -87,53 +61,20 @@ export function SupabaseIntegration() {
             Supabase Integration
           </h3>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            {organizations.length} organization
-            {organizations.length !== 1 ? "s" : ""} connected to Supabase.
+            Your account is connected to Supabase.
           </p>
         </div>
         <Button
-          onClick={handleDisconnectAllFromSupabase}
+          onClick={handleDisconnectFromSupabase}
           variant="destructive"
           size="sm"
           disabled={isDisconnecting}
           className="flex items-center gap-2"
         >
-          {isDisconnecting ? "Disconnecting..." : "Disconnect All"}
+          {isDisconnecting ? "Disconnecting..." : "Disconnect from Supabase"}
           <DatabaseZap className="h-4 w-4" />
         </Button>
       </div>
-
-      {/* Connected organizations list */}
-      <div className="mt-3 space-y-1">
-        {organizations.map((org) => (
-          <div
-            key={org.organizationSlug}
-            className="flex items-center justify-between p-2 rounded-md bg-muted/50 text-sm gap-2"
-          >
-            <div className="flex flex-col min-w-0 flex-1">
-              <span className="text-gray-700 dark:text-gray-300 font-medium truncate">
-                {org.name || `Organization ${org.organizationSlug.slice(0, 8)}`}
-              </span>
-              {org.ownerEmail && (
-                <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                  {org.ownerEmail}
-                </span>
-              )}
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-muted-foreground hover:text-destructive shrink-0"
-              onClick={() => handleDeleteOrganization(org.organizationSlug)}
-              title="Disconnect organization"
-            >
-              <Trash2 className="h-3.5 w-3.5 mr-1" />
-              <span className="text-xs">Disconnect</span>
-            </Button>
-          </div>
-        ))}
-      </div>
-
       <div className="mt-4">
         <div className="flex items-center space-x-3">
           <Switch
@@ -153,29 +94,6 @@ export function SupabaseIntegration() {
               This helps you track database changes in version control, though
               these files aren't used for chat context, which uses the live
               schema.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-4">
-        <div className="flex items-center space-x-3">
-          <Switch
-            id="skip-prune-edge-functions"
-            checked={!!settings?.skipPruneEdgeFunctions}
-            onCheckedChange={handleSkipPruneSettingChange}
-          />
-          <div className="space-y-1">
-            <Label
-              htmlFor="skip-prune-edge-functions"
-              className="text-sm font-medium"
-            >
-              Keep extra Supabase edge functions
-            </Label>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              When disabled, edge functions deployed to Supabase but not present
-              in your codebase will be automatically deleted during sync
-              operations (e.g., after reverting or modifying shared modules).
             </p>
           </div>
         </div>

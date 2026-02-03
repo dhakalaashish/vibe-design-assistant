@@ -1,22 +1,28 @@
 import { test } from "./helpers/test_helper";
 
 test("telemetry - accept", async ({ po }) => {
-  const beforeSettings = po.recordSettings();
+  // Expect NO telemetry settings to be set
+  await po.snapshotSettings();
+
   await po.clickTelemetryAccept();
   // Expect telemetry settings to be set
-  po.snapshotSettingsDelta(beforeSettings);
+  await po.snapshotSettings();
 });
 
 test("telemetry - reject", async ({ po }) => {
-  const beforeSettings = po.recordSettings();
+  // Expect NO telemetry settings to be set
+  await po.snapshotSettings();
+
   await po.clickTelemetryReject();
   // Expect telemetry settings to still NOT be set
-  po.snapshotSettingsDelta(beforeSettings);
+  await po.snapshotSettings();
 });
 
 test("telemetry - later", async ({ po }) => {
-  const beforeSettings = po.recordSettings();
+  // Expect NO telemetry settings to be set
+  await po.snapshotSettings();
+
   await po.clickTelemetryLater();
   // Expect telemetry settings to still NOT be set
-  po.snapshotSettingsDelta(beforeSettings);
+  await po.snapshotSettings();
 });

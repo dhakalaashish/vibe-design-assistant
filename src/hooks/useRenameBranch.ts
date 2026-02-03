@@ -1,9 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ipc } from "@/ipc/types";
+import { IpcClient } from "@/ipc/ipc_client";
 import { showError } from "@/lib/toast";
 import { selectedAppIdAtom } from "@/atoms/appAtoms";
 import { useAtomValue } from "jotai";
-import { queryKeys } from "@/lib/queryKeys";
 
 interface RenameBranchParams {
   appId: number;
@@ -26,15 +25,15 @@ export function useRenameBranch() {
       if (!params.newBranchName) {
         throw new Error("New branch name is required.");
       }
-      await ipc.app.renameBranch(params);
+      await IpcClient.getInstance().renameBranch(params);
     },
     onSuccess: (_, variables) => {
       // Invalidate queries that depend on branch information
       queryClient.invalidateQueries({
-        queryKey: queryKeys.branches.current({ appId: variables.appId }),
+        queryKey: ["currentBranch", variables.appId],
       });
       queryClient.invalidateQueries({
-        queryKey: queryKeys.versions.list({ appId: variables.appId }),
+        queryKey: ["versions", variables.appId],
       });
       // Potentially show a success message or trigger other actions
     },

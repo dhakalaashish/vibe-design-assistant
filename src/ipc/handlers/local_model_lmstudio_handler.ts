@@ -1,8 +1,7 @@
+import { ipcMain } from "electron";
 import log from "electron-log";
+import type { LocalModelListResponse, LocalModel } from "../ipc_types";
 import { LM_STUDIO_BASE_URL } from "../utils/lm_studio_utils";
-import { createTypedHandler } from "./base";
-import { languageModelContracts } from "../types/language-model";
-import type { LocalModel } from "../types/language-model";
 
 const logger = log.scope("lmstudio_handler");
 
@@ -19,7 +18,7 @@ export interface LMStudioModel {
   [key: string]: any;
 }
 
-export async function fetchLMStudioModels(): Promise<{ models: LocalModel[] }> {
+export async function fetchLMStudioModels(): Promise<LocalModelListResponse> {
   const modelsResponse: Response = await fetch(
     `${LM_STUDIO_BASE_URL}/api/v0/models`,
   );
@@ -41,7 +40,10 @@ export async function fetchLMStudioModels(): Promise<{ models: LocalModel[] }> {
 }
 
 export function registerLMStudioHandlers() {
-  createTypedHandler(languageModelContracts.listLMStudioModels, async () => {
-    return fetchLMStudioModels();
-  });
+  ipcMain.handle(
+    "local-models:list-lmstudio",
+    async (): Promise<LocalModelListResponse> => {
+      return fetchLMStudioModels();
+    },
+  );
 }

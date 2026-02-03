@@ -1,16 +1,18 @@
 import { db } from "../../db";
+
 import { apps } from "../../db/schema";
 import { eq } from "drizzle-orm";
 import { generateProblemReport } from "../processors/tsc";
 import { getDyadAppPath } from "@/paths/paths";
 import log from "electron-log";
-import { createTypedHandler } from "./base";
-import { miscContracts } from "../types/misc";
+import { createLoggedHandler } from "./safe_handle";
 
 const logger = log.scope("problems_handlers");
+const handle = createLoggedHandler(logger);
 
 export function registerProblemsHandlers() {
-  createTypedHandler(miscContracts.checkProblems, async (_, params) => {
+  // Handler to check problems using autofix with empty response
+  handle("check-problems", async (event, params: { appId: number }) => {
     try {
       // Get the app to find its path
       const app = await db.query.apps.findFirst({

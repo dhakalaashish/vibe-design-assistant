@@ -1,10 +1,8 @@
-import React, { useRef, useState } from "react";
-import type { FileAttachment } from "@/ipc/types";
-import { useAtom } from "jotai";
-import { attachmentsAtom } from "@/atoms/chatAtoms";
+import React, { useState, useRef } from "react";
+import type { FileAttachment } from "@/ipc/ipc_types";
 
 export function useAttachments() {
-  const [attachments, setAttachments] = useAtom(attachmentsAtom);
+  const [attachments, setAttachments] = useState<FileAttachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
 
@@ -135,6 +133,5 @@ export function useAttachments() {
     handleDrop,
     clearAttachments,
     handlePaste,
-    addAttachments,
   };
 }

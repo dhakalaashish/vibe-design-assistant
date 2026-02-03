@@ -1,2 +1,0 @@
-- "defaultChatMode": "local-agent"
-+ "defaultChatMode": "agent"

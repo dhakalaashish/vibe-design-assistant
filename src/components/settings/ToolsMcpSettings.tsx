@@ -18,15 +18,15 @@ import { AddMcpServerDeepLinkData } from "@/ipc/deep_link_data";
 
 type KeyValue = { key: string; value: string };
 
-function parseJsonToArray(
-  json?: Record<string, string> | string | null,
+function parseEnvJsonToArray(
+  envJson?: Record<string, string> | string | null,
 ): KeyValue[] {
-  if (!json) return [];
+  if (!envJson) return [];
   try {
     const obj =
-      typeof json === "string"
-        ? (JSON.parse(json) as unknown as Record<string, string>)
-        : (json as Record<string, string>);
+      typeof envJson === "string"
+        ? (JSON.parse(envJson) as unknown as Record<string, string>)
+        : (envJson as Record<string, string>);
     return Object.entries(obj).map(([key, value]) => ({
       key,
       value: String(value ?? ""),
@@ -36,7 +36,7 @@ function parseJsonToArray(
   }
 }
 
-function arrayToJsonObject(envVars: KeyValue[]): Record<string, string> {
+function arrayToEnvObject(envVars: KeyValue[]): Record<string, string> {
   const env: Record<string, string> = {};
   for (const { key, value } of envVars) {
     if (key.trim().length === 0) continue;
@@ -45,22 +45,20 @@ function arrayToJsonObject(envVars: KeyValue[]): Record<string, string> {
   return env;
 }
 
-function KeyValueEditor({
-  id,
-  json,
+function EnvVarsEditor({
+  serverId,
+  envJson,
   disabled,
   onSave,
   isSaving,
-  itemLabel = "Environment Variable",
 }: {
-  id: number;
-  json?: Record<string, string> | null;
+  serverId: number;
+  envJson?: Record<string, string> | null;
   disabled?: boolean;
   onSave: (envVars: KeyValue[]) => Promise<void>;
   isSaving: boolean;
-  itemLabel?: string;
 }) {
-  const initial = useMemo(() => parseJsonToArray(json), [json]);
+  const initial = useMemo(() => parseEnvJsonToArray(envJson), [envJson]);
   const [envVars, setEnvVars] = useState<KeyValue[]>(initial);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editingKeyValue, setEditingKeyValue] = useState("");
@@ -71,7 +69,7 @@ function KeyValueEditor({
 
   React.useEffect(() => {
     setEnvVars(initial);
-  }, [id, initial]);
+  }, [serverId, initial]);
 
   const saveAll = async (next: KeyValue[]) => {
     await onSave(next);
@@ -84,7 +82,7 @@ function KeyValueEditor({
       return;
     }
     if (envVars.some((e) => e.key === newKey.trim())) {
-      showError(`${itemLabel} with this key already exists`);
+      showError("Environment variable with this key already exists");
       return;
     }
     const next = [...envVars, { key: newKey.trim(), value: newValue.trim() }];
@@ -92,7 +90,7 @@ function KeyValueEditor({
     setNewKey("");
     setNewValue("");
     setIsAddingNew(false);
-    showSuccess(`${itemLabel}s saved`);
+    showSuccess("Environment variables saved");
   };
 
   const handleEdit = (kv: KeyValue) => {
@@ -112,7 +110,7 @@ function KeyValueEditor({
         (e) => e.key === editingKeyValue.trim() && e.key !== editingKey,
       )
     ) {
-      showError(`${itemLabel} with this key already exists`);
+      showError("Environment variable with this key already exists");
       return;
     }
     const next = envVars.map((e) =>
@@ -124,7 +122,7 @@ function KeyValueEditor({
     setEditingKey(null);
     setEditingKeyValue("");
     setEditingValue("");
-    showSuccess(`${itemLabel}s saved`);
+    showSuccess("Environment variables saved");
   };
 
   const handleCancelEdit = () => {
@@ -136,7 +134,7 @@ function KeyValueEditor({
   const handleDelete = async (key: string) => {
     const next = envVars.filter((e) => e.key !== key);
     await saveAll(next);
-    showSuccess(`${itemLabel}s saved`);
+    showSuccess("Environment variables saved");
   };
 
   return (
@@ -144,10 +142,10 @@ function KeyValueEditor({
       {isAddingNew ? (
         <div className="space-y-3 p-3 border rounded-md bg-muted/50">
           <div className="space-y-2">
-            <Label htmlFor={`env-new-key-${id}`}>Key</Label>
+            <Label htmlFor={`env-new-key-${serverId}`}>Key</Label>
             <Input
-              id={`env-new-key-${id}`}
-              placeholder={itemLabel === "Header" ? "Key" : "e.g., PATH"}
+              id={`env-new-key-${serverId}`}
+              placeholder="e.g., PATH"
               value={newKey}
               onChange={(e) => setNewKey(e.target.value)}
               autoFocus
@@ -155,12 +153,10 @@ function KeyValueEditor({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor={`env-new-value-${id}`}>Value</Label>
+            <Label htmlFor={`env-new-value-${serverId}`}>Value</Label>
             <Input
-              id={`env-new-value-${id}`}
-              placeholder={
-                itemLabel === "Header" ? "Value" : "e.g., /usr/local/bin"
-              }
+              id={`env-new-value-${serverId}`}
+              placeholder="e.g., /usr/local/bin"
               value={newValue}
               onChange={(e) => setNewValue(e.target.value)}
               disabled={disabled || isSaving}
@@ -197,14 +193,14 @@ function KeyValueEditor({
           disabled={disabled}
         >
           <Plus size={14} />
-          Add {itemLabel}
+          Add Environment Variable
         </Button>
       )}
 
       <div className="space-y-2">
         {envVars.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-4">
-            No {itemLabel.toLowerCase()}s configured
+            No environment variables configured
           </p>
         ) : (
           envVars.map((kv) => (
@@ -388,10 +384,8 @@ export function ToolsMcpSettings() {
             />
           </div>
           <div>
-            <Label htmlFor="mcp-transport-select">Transport</Label>
+            <Label>Transport</Label>
             <select
-              id="mcp-transport-select"
-              data-testid="mcp-transport-select"
               value={transport}
               onChange={(e) => setTransport(e.target.value as Transport)}
               className="w-full h-9 rounded-md border bg-transparent px-3 text-sm"
@@ -472,33 +466,15 @@ export function ToolsMcpSettings() {
                 <div className="text-sm font-medium mb-2">
                   Environment Variables
                 </div>
-                <KeyValueEditor
-                  id={s.id}
-                  json={s.envJson}
+                <EnvVarsEditor
+                  serverId={s.id}
+                  envJson={s.envJson}
                   disabled={!s.enabled}
                   isSaving={!!isUpdatingServer}
                   onSave={async (pairs) => {
                     await updateServer({
                       id: s.id,
-                      envJson: arrayToJsonObject(pairs),
-                    });
-                  }}
-                />
-              </div>
-            )}
-            {s.transport === "http" && (
-              <div className="mt-3">
-                <div className="text-sm font-medium mb-2">Headers</div>
-                <KeyValueEditor
-                  id={s.id}
-                  json={s.headersJson}
-                  disabled={!s.enabled}
-                  isSaving={!!isUpdatingServer}
-                  itemLabel="Header"
-                  onSave={async (pairs) => {
-                    await updateServer({
-                      id: s.id,
-                      headersJson: arrayToJsonObject(pairs),
+                      envJson: arrayToEnvObject(pairs),
                     });
                   }}
                 />

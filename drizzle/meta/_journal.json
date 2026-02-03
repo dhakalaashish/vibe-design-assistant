@@ -127,55 +127,6 @@
       "when": 1764804624402,
       "tag": "0017_sharp_corsair",
       "breakpoints": true
-    },
-    {
-      "idx": 18,
-      "version": "6",
-      "when": 1766124364939,
-      "tag": "0018_skinny_ezekiel",
-      "breakpoints": true
-    },
-    {
-      "idx": 19,
-      "version": "6",
-      "when": 1766529533747,
-      "tag": "0019_cute_carnage",
-      "breakpoints": true
-    },
-    {
-      "idx": 20,
-      "version": "6",
-      "when": 1766619976318,
-      "tag": "0020_nebulous_patch",
-      "breakpoints": true
-    },
-    {
-      "idx": 21,
-      "version": "6",
-      "when": 1768167214574,
-      "tag": "0021_kind_luckman",
-      "breakpoints": true
-    },
-    {
-      "idx": 22,
-      "version": "6",
-      "when": 1768924462154,
-      "tag": "0022_loving_wendigo",
-      "breakpoints": true
-    },
-    {
-      "idx": 23,
-      "version": "6",
-      "when": 1769188144685,
-      "tag": "0023_pale_red_hulk",
-      "breakpoints": true
-    },
-    {
-      "idx": 24,
-      "version": "6",
-      "when": 1769582904159,
-      "tag": "0024_useful_skin",
-      "breakpoints": true
     }
   ]
 }

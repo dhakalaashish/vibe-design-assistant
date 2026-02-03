@@ -28,7 +28,6 @@ import { ChatList } from "./ChatList";
 import { AppList } from "./AppList";
 import { HelpDialog } from "./HelpDialog"; // Import the new dialog
 import { SettingsList } from "./SettingsList";
-import { LibraryList } from "./LibraryList";
 
 // Menu items.
 const items = [
@@ -49,7 +48,7 @@ const items = [
   },
   {
     title: "Library",
-    to: "/themes",
+    to: "/library",
     icon: BookOpen,
   },
   {
@@ -98,9 +97,6 @@ export function AppSidebar() {
     routerState.location.pathname.startsWith("/app-details");
   const isChatRoute = routerState.location.pathname === "/chat";
   const isSettingsRoute = routerState.location.pathname.startsWith("/settings");
-  const isLibraryRoute =
-    routerState.location.pathname.startsWith("/library") ||
-    routerState.location.pathname.startsWith("/themes");
 
   let selectedItem: string | null = null;
   if (hoverState === "start-hover:app") {
@@ -118,8 +114,6 @@ export function AppSidebar() {
       selectedItem = "Chat";
     } else if (isSettingsRoute) {
       selectedItem = "Settings";
-    } else if (isLibraryRoute) {
-      selectedItem = "Library";
     }
   }
 
@@ -148,7 +142,6 @@ export function AppSidebar() {
             <AppList show={selectedItem === "Apps"} />
             <ChatList show={selectedItem === "Chat"} />
             <SettingsList show={selectedItem === "Settings"} />
-            <LibraryList show={selectedItem === "Library"} />
           </div>
         </div>
       </SidebarContent>

@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ipc } from "@/ipc/types";
-import { queryKeys } from "@/lib/queryKeys";
+import { IpcClient } from "@/ipc/ipc_client";
 
 export interface PromptItem {
   id: number;
@@ -14,9 +13,10 @@ export interface PromptItem {
 export function usePrompts() {
   const queryClient = useQueryClient();
   const listQuery = useQuery({
-    queryKey: queryKeys.prompts.all,
+    queryKey: ["prompts"],
     queryFn: async (): Promise<PromptItem[]> => {
-      return ipc.prompt.list();
+      const ipc = IpcClient.getInstance();
+      return ipc.listPrompts();
     },
     meta: { showErrorToast: true },
   });
@@ -27,10 +27,11 @@ export function usePrompts() {
       description?: string;
       content: string;
     }): Promise<PromptItem> => {
-      return ipc.prompt.create(params);
+      const ipc = IpcClient.getInstance();
+      return ipc.createPrompt(params);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.prompts.all });
+      queryClient.invalidateQueries({ queryKey: ["prompts"] });
     },
     meta: {
       showErrorToast: true,
@@ -44,10 +45,11 @@ export function usePrompts() {
       description?: string;
       content: string;
     }): Promise<void> => {
-      return ipc.prompt.update(params);
+      const ipc = IpcClient.getInstance();
+      return ipc.updatePrompt(params);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.prompts.all });
+      queryClient.invalidateQueries({ queryKey: ["prompts"] });
     },
     meta: {
       showErrorToast: true,
@@ -56,10 +58,11 @@ export function usePrompts() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number): Promise<void> => {
-      return ipc.prompt.delete(id);
+      const ipc = IpcClient.getInstance();
+      return ipc.deletePrompt(id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.prompts.all });
+      queryClient.invalidateQueries({ queryKey: ["prompts"] });
     },
     meta: {
       showErrorToast: true,

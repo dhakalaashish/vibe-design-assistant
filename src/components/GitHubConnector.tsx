@@ -6,9 +6,8 @@ import {
   Check,
   AlertTriangle,
   ChevronRight,
-  GitMerge,
 } from "lucide-react";
-import { ipc, type GithubSyncOptions } from "@/ipc/types";
+import { IpcClient } from "@/ipc/ipc_client";
 import { useSettings } from "@/hooks/useSettings";
 import { useLoadApp } from "@/hooks/useLoadApp";
 import {
@@ -28,11 +27,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { GithubBranchManager } from "@/components/GithubBranchManager";
-
-type SyncResult =
-  | { error: Error; handled?: boolean }
-  | { error?: undefined; handled?: boolean };
 
 interface GitHubConnectorProps {
   appId: number | null;
@@ -81,21 +75,13 @@ function ConnectedGitHubConnector({
   const [showForceDialog, setShowForceDialog] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [disconnectError, setDisconnectError] = useState<string | null>(null);
-  const [conflicts, setConflicts] = useState<string[]>([]);
-  const [rebaseStatusMessage, setRebaseStatusMessage] = useState<string | null>(
-    null,
-  );
-  const [rebaseAction, setRebaseAction] = useState<
-    "abort" | "continue" | "safe-push" | null
-  >(null);
-  const [rebaseInProgress, setRebaseInProgress] = useState(false);
-  const lastAutoSyncedAppIdRef = useRef<number | null>(null);
+  const autoSyncTriggeredRef = useRef(false);
 
   const handleDisconnectRepo = async () => {
     setIsDisconnecting(true);
     setDisconnectError(null);
     try {
-      await ipc.github.disconnect({ appId });
+      await IpcClient.getInstance().disconnectGithubRepo(appId);
       refreshApp();
     } catch (err: any) {
       setDisconnectError(err.message || "Failed to disconnect repository.");
@@ -105,79 +91,31 @@ function ConnectedGitHubConnector({
   };
 
   const handleSyncToGithub = useCallback(
-    async ({
-      force = false,
-      forceWithLease = false,
-    }: GithubSyncOptions = {}): Promise<SyncResult> => {
+    async (force: boolean = false) => {
       setIsSyncing(true);
       setSyncError(null);
       setSyncSuccess(false);
       setShowForceDialog(false);
-      setRebaseInProgress(false);
-      setConflicts([]); // Clear conflicts when starting a new sync
 
       try {
-        await ipc.github.push({
+        const result = await IpcClient.getInstance().syncGithubRepo(
           appId,
           force,
-          forceWithLease,
-        });
-        setSyncSuccess(true);
-        setRebaseInProgress(false);
-        setConflicts([]); // Clear conflicts on successful sync
-        setRebaseStatusMessage(null);
-        return {};
+        );
+        if (result.success) {
+          setSyncSuccess(true);
+        } else {
+          setSyncError(result.error || "Failed to sync to GitHub.");
+          // If it's a push rejection error, show the force dialog
+          if (
+            result.error?.includes("rejected") ||
+            result.error?.includes("non-fast-forward")
+          ) {
+            // Don't show force dialog immediately, let user see the error first
+          }
+        }
       } catch (err: any) {
-        if (err?.name === "GitConflictError") {
-          try {
-            const mergeConflicts = await ipc.github.getConflicts({ appId });
-            if (mergeConflicts.length > 0) {
-              setConflicts(mergeConflicts);
-              setSyncError(
-                "Merge conflicts detected. Please resolve them in the editor.",
-              );
-              (err as Error & { handled?: boolean }).handled = true;
-              return { error: err, handled: true };
-            }
-          } catch {
-            // If getGithubMergeConflicts fails, fall through to handle the original GitConflictError
-            // The error from getGithubMergeConflicts is intentionally not handled here
-            // so the original GitConflictError can be displayed to the user
-          }
-        }
-
-        // Check for structured error codes instead of parsing error messages
-        const errorCode = err?.code as
-          | "REBASE_IN_PROGRESS"
-          | "MERGE_IN_PROGRESS"
-          | undefined;
-
-        // Fallback: query backend git state if structured error code is missing
-        let inferredRebaseInProgress = false;
-        if (!errorCode) {
-          try {
-            const state = await ipc.github.getGitState({ appId });
-            inferredRebaseInProgress = state.rebaseInProgress;
-          } catch {
-            // ignore state inference errors
-          }
-        }
-
-        // Final fallback: inspect error message for known rebase markers when state fetch fails
-        const messageIndicatesRebase =
-          typeof err?.message === "string" &&
-          err.message.toLowerCase().includes("rebase-merge");
-
-        const rebaseInProgressState =
-          errorCode === "REBASE_IN_PROGRESS" ||
-          inferredRebaseInProgress ||
-          messageIndicatesRebase;
-
-        const errorMessage = err.message || "Failed to sync to GitHub.";
-        setSyncError(errorMessage);
-        setRebaseInProgress(rebaseInProgressState);
-        setRebaseStatusMessage(null);
-        return { error: err };
+        setSyncError(err.message || "Failed to sync to GitHub.");
       } finally {
         setIsSyncing(false);
       }
@@ -185,130 +123,18 @@ function ConnectedGitHubConnector({
     [appId],
   );
 
-  const handleAbortRebase = useCallback(async () => {
-    setRebaseAction("abort");
-    setSyncError(null);
-    setRebaseStatusMessage(null);
-    setSyncSuccess(false);
-    try {
-      await ipc.github.rebaseAbort({ appId });
-      setRebaseInProgress(false);
-      setRebaseStatusMessage("Rebase aborted. You can try syncing again.");
-    } catch (err: any) {
-      setSyncError(err.message || "Failed to abort rebase.");
-      setRebaseInProgress(true);
-    } finally {
-      setRebaseAction(null);
-    }
-  }, [appId]);
-
-  const handleContinueRebase = useCallback(async () => {
-    setRebaseAction("continue");
-    setSyncError(null);
-    setRebaseStatusMessage(null);
-    setSyncSuccess(false);
-    try {
-      await ipc.github.rebaseContinue({ appId });
-      setRebaseInProgress(false);
-      setRebaseStatusMessage("Rebase continued. You can sync when ready.");
-    } catch (err: any) {
-      setSyncError(err.message || "Failed to continue rebase.");
-      setRebaseInProgress(true);
-    } finally {
-      setRebaseAction(null);
-    }
-  }, [appId]);
-
-  const handleSafeForcePush = useCallback(async () => {
-    setRebaseAction("safe-push");
-    try {
-      await handleSyncToGithub({
-        force: false,
-        forceWithLease: true,
-      });
-    } finally {
-      setRebaseAction(null);
-    }
-  }, [handleSyncToGithub]);
-
-  const handleRebaseAndSync = useCallback(async () => {
-    setIsSyncing(true);
-    try {
-      // First, perform the rebase
-      await ipc.github.rebase({ appId });
-      setRebaseStatusMessage(null);
-      const syncResult = await handleSyncToGithub();
-      if (syncResult?.error) {
-        if (!syncResult.handled) {
-          throw syncResult.error;
-        }
-        return;
-      }
-      setRebaseStatusMessage("Rebase and push completed successfully.");
-    } catch (err: any) {
-      if (err?.handled) {
-        return;
-      }
-      const errorMessage =
-        err?.message || "Failed to rebase and sync to GitHub.";
-      setSyncError(errorMessage);
-      setRebaseInProgress(errorMessage.includes("rebase-merge"));
-      // If rebase failed, show appropriate message
-      if (errorMessage.includes("rebase")) {
-        setRebaseStatusMessage(
-          "Rebase failed. You may need to resolve conflicts or abort the rebase.",
-        );
-      }
-      // Clear any stale rebase success message if sync failed after rebase
-      if (errorMessage.includes("sync") || errorMessage.includes("push")) {
-        setRebaseStatusMessage(null);
-      }
-    } finally {
-      // Ensure syncing state is reset whether rebase or sync fails before handleSyncToGithub runs its own cleanup
-      setIsSyncing(false);
-    }
-  }, [appId, handleSyncToGithub]);
-
   // Auto-sync when triggerAutoSync prop is true
   useEffect(() => {
-    if (!appId) return;
-
-    // Only auto-sync once per appId
-    const alreadySyncedForThisApp = lastAutoSyncedAppIdRef.current === appId;
-
-    if (triggerAutoSync && !alreadySyncedForThisApp && !isSyncing) {
-      lastAutoSyncedAppIdRef.current = appId;
-      handleSyncToGithub()
-        .catch(() => {
-          // Error is already handled in handleSyncToGithub via state updates
-        })
-        .finally(() => {
-          onAutoSyncComplete?.();
-        });
+    if (triggerAutoSync && !autoSyncTriggeredRef.current) {
+      autoSyncTriggeredRef.current = true;
+      handleSyncToGithub(false).finally(() => {
+        onAutoSyncComplete?.();
+      });
+    } else if (!triggerAutoSync) {
+      // Reset the ref when triggerAutoSync becomes false
+      autoSyncTriggeredRef.current = false;
     }
-
-    // allow re-sync if triggerAutoSync is explicitly turned off
-    if (
-      !triggerAutoSync &&
-      !isSyncing &&
-      lastAutoSyncedAppIdRef.current === appId
-    ) {
-      lastAutoSyncedAppIdRef.current = null;
-    }
-  }, [
-    appId,
-    triggerAutoSync,
-    isSyncing,
-    handleSyncToGithub,
-    onAutoSyncComplete,
-  ]);
-
-  const isForcePushError =
-    syncError?.includes("rejected") || syncError?.includes("non-fast-forward");
-  const showRebaseAndSync = syncError?.includes("divergent branches");
-  const showRebaseRecoveryOptions =
-    rebaseInProgress || (syncError?.includes("rebase-merge") ?? false);
-  const isRebaseActionPending = isSyncing || !!rebaseAction;
+  }, [triggerAutoSync]); // Only depend on triggerAutoSync to avoid unnecessary re-runs
 
   return (
     <div className="w-full" data-testid="github-connected-repo">
@@ -316,7 +142,7 @@ function ConnectedGitHubConnector({
       <a
         onClick={(e) => {
           e.preventDefault();
-          ipc.system.openExternalUrl(
+          IpcClient.getInstance().openExternalUrl(
             `https://github.com/${app.githubOrg}/${app.githubRepo}`,
           );
         }}
@@ -327,13 +153,12 @@ function ConnectedGitHubConnector({
         {app.githubOrg}/{app.githubRepo}
       </a>
       {app.githubBranch && (
-        <GithubBranchManager appId={appId} onBranchChange={refreshApp} />
+        <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+          Branch: <span className="font-mono">{app.githubBranch}</span>
+        </p>
       )}
       <div className="mt-2 flex gap-2">
-        <Button
-          onClick={() => handleSyncToGithub()}
-          disabled={isRebaseActionPending}
-        >
+        <Button onClick={() => handleSyncToGithub(false)} disabled={isSyncing}>
           {isSyncing ? (
             <>
               <svg
@@ -372,13 +197,13 @@ function ConnectedGitHubConnector({
         </Button>
       </div>
       {syncError && (
-        <div className="mt-2 space-y-2">
+        <div className="mt-2">
           <p className="text-red-600">
             {syncError}{" "}
             <a
               onClick={(e) => {
                 e.preventDefault();
-                ipc.system.openExternalUrl(
+                IpcClient.getInstance().openExternalUrl(
                   "https://www.dyad.sh/docs/integrations/github#troubleshooting",
                 );
               }}
@@ -389,85 +214,19 @@ function ConnectedGitHubConnector({
               See troubleshooting guide
             </a>
           </p>
-          {showRebaseRecoveryOptions && (
-            <div className="space-y-2 rounded-md border border-orange-200 p-3 dark:border-orange-800 dark:bg-orange-900/20">
-              <p className="text-sm text-orange-800 dark:text-orange-100">
-                A rebase is already in progress. Choose how to proceed.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  onClick={handleAbortRebase}
-                  variant="outline"
-                  size="sm"
-                  disabled={isRebaseActionPending}
-                >
-                  <AlertTriangle className="h-4 w-4 mr-2" />
-                  {rebaseAction === "abort" ? "Aborting..." : "Abort rebase"}
-                </Button>
-                <Button
-                  onClick={handleContinueRebase}
-                  variant="outline"
-                  size="sm"
-                  disabled={isRebaseActionPending}
-                >
-                  <GitMerge className="h-4 w-4 mr-2" />
-                  {rebaseAction === "continue"
-                    ? "Continuing..."
-                    : "Continue rebase"}
-                </Button>
-                <Button
-                  onClick={handleSafeForcePush}
-                  variant="outline"
-                  size="sm"
-                  disabled={isRebaseActionPending}
-                  className="text-orange-600 border-orange-600 hover:bg-orange-50"
-                >
-                  <AlertTriangle className="h-4 w-4 mr-2" />
-                  {rebaseAction === "safe-push"
-                    ? "Safe force pushing..."
-                    : "Safe Force Push"}
-                </Button>
-              </div>
-            </div>
-          )}
-          {isForcePushError && (
+          {(syncError.includes("rejected") ||
+            syncError.includes("non-fast-forward")) && (
             <Button
               onClick={() => setShowForceDialog(true)}
               variant="outline"
               size="sm"
-              disabled={isRebaseActionPending}
-              className="text-orange-600 border-orange-600 hover:bg-orange-50"
+              className="mt-2 text-orange-600 border-orange-600 hover:bg-orange-50"
             >
               <AlertTriangle className="h-4 w-4 mr-2" />
               Force Push (Dangerous)
             </Button>
           )}
-          {showRebaseAndSync && (
-            <Button
-              onClick={handleRebaseAndSync}
-              variant="outline"
-              size="sm"
-              disabled={isRebaseActionPending}
-              className="mt-2 ml-2"
-            >
-              <GitMerge className="h-4 w-4 mr-2" />
-              Rebase and Sync
-            </Button>
-          )}
         </div>
-      )}
-      {/* Conflict Resolver */}
-      {conflicts.length > 0 && (
-        //show a message that there are conflicts and to resolve them in Editor
-        <p className="text-sm text-red-600">
-          There are conflicts in the repository. Please resolve them in the
-          editor.
-        </p>
-      )}
-      {rebaseStatusMessage && (
-        <p className="text-sm text-gray-700 dark:text-gray-300 mt-2">
-          {rebaseStatusMessage}
-        </p>
       )}
       {syncSuccess && (
         <p className="text-green-600 mt-2">Successfully pushed to GitHub!</p>
@@ -516,7 +275,7 @@ function ConnectedGitHubConnector({
             </Button>
             <Button
               variant="destructive"
-              onClick={() => handleSyncToGithub({ force: true })}
+              onClick={() => handleSyncToGithub(true)}
               disabled={isSyncing}
             >
               {isSyncing ? "Force Pushing..." : "Force Push"}
@@ -590,58 +349,62 @@ export function UnconnectedGitHubConnector({
     setGithubStatusMessage("Requesting device code from GitHub...");
 
     // Send IPC message to main process to start the flow
-    ipc.github.startFlow({ appId });
+    IpcClient.getInstance().startGithubDeviceFlow(appId);
   };
 
   useEffect(() => {
     const cleanupFunctions: (() => void)[] = [];
 
     // Listener for updates (user code, verification uri, status messages)
-    const removeUpdateListener = ipc.events.github.onFlowUpdate((data) => {
-      console.log("Received github:flow-update", data);
-      if (data.userCode) {
-        setGithubUserCode(data.userCode);
-      }
-      if (data.verificationUri) {
-        setGithubVerificationUri(data.verificationUri);
-      }
-      if (data.message) {
-        setGithubStatusMessage(data.message);
-      }
+    const removeUpdateListener =
+      IpcClient.getInstance().onGithubDeviceFlowUpdate((data) => {
+        console.log("Received github:flow-update", data);
+        if (data.userCode) {
+          setGithubUserCode(data.userCode);
+        }
+        if (data.verificationUri) {
+          setGithubVerificationUri(data.verificationUri);
+        }
+        if (data.message) {
+          setGithubStatusMessage(data.message);
+        }
 
-      setGithubError(null); // Clear previous errors on new update
-      if (!data.userCode && !data.verificationUri && data.message) {
-        // Likely just a status message, keep connecting state
-        setIsConnectingToGithub(true);
-      }
-      if (data.userCode && data.verificationUri) {
-        setIsConnectingToGithub(true); // Still connecting until success/error
-      }
-    });
+        setGithubError(null); // Clear previous errors on new update
+        if (!data.userCode && !data.verificationUri && data.message) {
+          // Likely just a status message, keep connecting state
+          setIsConnectingToGithub(true);
+        }
+        if (data.userCode && data.verificationUri) {
+          setIsConnectingToGithub(true); // Still connecting until success/error
+        }
+      });
     cleanupFunctions.push(removeUpdateListener);
 
     // Listener for success
-    const removeSuccessListener = ipc.events.github.onFlowSuccess((data) => {
-      console.log("Received github:flow-success", data);
-      setGithubStatusMessage("Successfully connected to GitHub!");
-      setGithubUserCode(null); // Clear user-facing info
-      setGithubVerificationUri(null);
-      setGithubError(null);
-      setIsConnectingToGithub(false);
-      refreshSettings();
-      setIsExpanded(true);
-    });
+    const removeSuccessListener =
+      IpcClient.getInstance().onGithubDeviceFlowSuccess((data) => {
+        console.log("Received github:flow-success", data);
+        setGithubStatusMessage("Successfully connected to GitHub!");
+        setGithubUserCode(null); // Clear user-facing info
+        setGithubVerificationUri(null);
+        setGithubError(null);
+        setIsConnectingToGithub(false);
+        refreshSettings();
+        setIsExpanded(true);
+      });
     cleanupFunctions.push(removeSuccessListener);
 
     // Listener for errors
-    const removeErrorListener = ipc.events.github.onFlowError((data) => {
-      console.log("Received github:flow-error", data);
-      setGithubError(data.error || "An unknown error occurred.");
-      setGithubStatusMessage(null);
-      setGithubUserCode(null);
-      setGithubVerificationUri(null);
-      setIsConnectingToGithub(false);
-    });
+    const removeErrorListener = IpcClient.getInstance().onGithubDeviceFlowError(
+      (data) => {
+        console.log("Received github:flow-error", data);
+        setGithubError(data.error || "An unknown error occurred.");
+        setGithubStatusMessage(null);
+        setGithubUserCode(null);
+        setGithubVerificationUri(null);
+        setIsConnectingToGithub(false);
+      },
+    );
     cleanupFunctions.push(removeErrorListener);
 
     // Cleanup function to remove all listeners when component unmounts or appId changes
@@ -666,7 +429,7 @@ export function UnconnectedGitHubConnector({
   const loadAvailableRepos = async () => {
     setIsLoadingRepos(true);
     try {
-      const repos = await ipc.github.listRepos();
+      const repos = await IpcClient.getInstance().listGithubRepos();
       setAvailableRepos(repos);
     } catch (error) {
       console.error("Failed to load GitHub repos:", error);
@@ -690,7 +453,10 @@ export function UnconnectedGitHubConnector({
     setCustomBranchName(""); // Clear custom branch name
     try {
       const [owner, repo] = selectedRepo.split("/");
-      const branches = await ipc.github.getRepoBranches({ owner, repo });
+      const branches = await IpcClient.getInstance().getGithubRepoBranches(
+        owner,
+        repo,
+      );
       setAvailableBranches(branches);
       // Default to main if available, otherwise first branch
       const defaultBranch =
@@ -713,10 +479,10 @@ export function UnconnectedGitHubConnector({
       if (!name) return;
       setIsCheckingRepo(true);
       try {
-        const result = await ipc.github.isRepoAvailable({
-          org: githubOrg,
-          repo: name,
-        });
+        const result = await IpcClient.getInstance().checkGithubRepoAvailable(
+          githubOrg,
+          name,
+        );
         setRepoAvailable(result.available);
         if (!result.available) {
           setRepoCheckError(
@@ -754,22 +520,22 @@ export function UnconnectedGitHubConnector({
 
     try {
       if (repoSetupMode === "create") {
-        await ipc.github.createRepo({
-          org: githubOrg,
-          repo: repoName,
+        await IpcClient.getInstance().createGithubRepo(
+          githubOrg,
+          repoName,
           appId,
-          branch: selectedBranch,
-        });
+          selectedBranch,
+        );
       } else {
         const [owner, repo] = selectedRepo.split("/");
         const branchToUse =
           branchInputMode === "custom" ? customBranchName : selectedBranch;
-        await ipc.github.connectExistingRepo({
+        await IpcClient.getInstance().connectToExistingGithubRepo(
           owner,
           repo,
-          branch: branchToUse,
+          branchToUse,
           appId,
-        });
+        );
       }
 
       setCreateRepoSuccess(true);
@@ -820,7 +586,6 @@ export function UnconnectedGitHubConnector({
             </svg>
           )}
         </Button>
-
         {/* GitHub Connection Status/Instructions */}
         {(githubUserCode || githubStatusMessage || githubError) && (
           <div className="mt-6 p-4 border rounded-md bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600">
@@ -838,7 +603,9 @@ export function UnconnectedGitHubConnector({
                     href={githubVerificationUri} // Make it a direct link
                     onClick={(e) => {
                       e.preventDefault();
-                      ipc.system.openExternalUrl(githubVerificationUri);
+                      IpcClient.getInstance().openExternalUrl(
+                        githubVerificationUri,
+                      );
                     }}
                     target="_blank"
                     rel="noopener noreferrer"

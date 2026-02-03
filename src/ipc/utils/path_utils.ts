@@ -1,5 +1,4 @@
 import path from "node:path";
-import { normalizePath } from "../../../shared/normalizePath";
 
 /**
  * Safely joins paths while ensuring the result stays within the base directory.
@@ -12,11 +11,8 @@ import { normalizePath } from "../../../shared/normalizePath";
  * @throws Error if the resulting path would be outside the base directory
  */
 export function safeJoin(basePath: string, ...paths: string[]): string {
-  // Normalize backslashes to forward slashes for cross-platform consistency
-  const normalizedPaths = paths.map((p) => normalizePath(p));
-
   // Check if any of the path segments are absolute paths (which would be unsafe)
-  for (const pathSegment of normalizedPaths) {
+  for (const pathSegment of paths) {
     if (path.isAbsolute(pathSegment)) {
       throw new Error(
         `Unsafe path: joining "${paths.join(", ")}" with base "${basePath}" would escape the base directory`,
@@ -43,7 +39,7 @@ export function safeJoin(basePath: string, ...paths: string[]): string {
   }
 
   // Join all the paths
-  const joinedPath = path.join(basePath, ...normalizedPaths);
+  const joinedPath = path.join(basePath, ...paths);
 
   // Resolve both paths to absolute paths to handle any ".." components
   const resolvedBasePath = path.resolve(basePath);

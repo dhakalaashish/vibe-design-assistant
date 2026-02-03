@@ -102,9 +102,3 @@ sqlite.db
 userData/
 .env.local
 .idea/
-
-# Claude Code
-.claude/settings.local.json
-
-# Python
-__pycache__/

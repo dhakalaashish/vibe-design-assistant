@@ -1,2 +1,21 @@
-- "selectedTemplateId": "react"
-+ "selectedTemplateId": "next"
+{
+  "selectedModel": {
+    "name": "test-model",
+    "provider": "custom::testing",
+    "customModelId": 1
+  },
+  "providerSettings": {},
+  "telemetryConsent": "unset",
+  "telemetryUserId": "[UUID]",
+  "hasRunBefore": true,
+  "experiments": {},
+  "lastShownReleaseNotesVersion": "[scrubbed]",
+  "enableProLazyEditsMode": true,
+  "enableProSmartFilesContextMode": true,
+  "selectedTemplateId": "next",
+  "selectedChatMode": "build",
+  "enableAutoFixProblems": false,
+  "enableAutoUpdate": true,
+  "releaseChannel": "stable",
+  "isTestMode": true
+}

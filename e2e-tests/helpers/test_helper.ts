@@ -20,120 +20,6 @@ export const Timeout = {
   MEDIUM: process.env.CI ? 30_000 : 15_000,
 };
 
-/**
- * Normalizes item_reference IDs in the input array to be deterministic.
- * item_reference objects have the shape { type: "item_reference", id: "msg_..." }
- * where the ID is a timestamp-based value that changes between test runs.
- */
-function normalizeItemReferences(dump: any): void {
-  const input = dump?.body?.input;
-  if (!Array.isArray(input)) {
-    return;
-  }
-
-  let refIndex = 0;
-  for (const item of input) {
-    if (item?.type === "item_reference" && item?.id) {
-      item.id = `[[ITEM_REF_${refIndex}]]`;
-      refIndex++;
-    }
-  }
-}
-
-/**
- * Normalizes tool_call IDs and tool_call_id references to be deterministic.
- * Tool call IDs have the format "call_[timestamp]_[index]" which changes between runs.
- */
-function normalizeToolCallIds(dump: any): void {
-  const messages = dump?.body?.messages;
-  if (!Array.isArray(messages)) {
-    return;
-  }
-
-  const oldToNewId: Record<string, string> = {};
-  let toolCallIndex = 0;
-
-  // First pass: collect all tool_call IDs and create mapping
-  for (const message of messages) {
-    if (message?.tool_calls && Array.isArray(message.tool_calls)) {
-      for (const toolCall of message.tool_calls) {
-        if (toolCall?.id && !oldToNewId[toolCall.id]) {
-          oldToNewId[toolCall.id] = `[[TOOL_CALL_${toolCallIndex}]]`;
-          toolCallIndex++;
-        }
-      }
-    }
-  }
-
-  // Second pass: replace all IDs
-  for (const message of messages) {
-    if (message?.tool_calls && Array.isArray(message.tool_calls)) {
-      for (const toolCall of message.tool_calls) {
-        if (toolCall?.id && oldToNewId[toolCall.id]) {
-          toolCall.id = oldToNewId[toolCall.id];
-        }
-      }
-    }
-    if (message?.tool_call_id && oldToNewId[message.tool_call_id]) {
-      message.tool_call_id = oldToNewId[message.tool_call_id];
-    }
-  }
-}
-
-/**
- * Normalizes fileId hashes in versioned_files to be deterministic.
- * FileIds are SHA-256 hashes that may include non-deterministic components
- * like app paths with timestamps. This replaces them with stable placeholders
- * based on content sorting.
- */
-function normalizeVersionedFiles(dump: any): void {
-  const vf = dump?.body?.dyad_options?.versioned_files;
-  if (!vf?.fileIdToContent) {
-    return;
-  }
-
-  const fileIdToContent = vf.fileIdToContent as Record<string, string>;
-
-  // Create mapping from old fileId to new deterministic fileId
-  // Sort by content to ensure deterministic ordering
-  const entries = Object.entries(fileIdToContent).sort((a, b) =>
-    String(a[1]).localeCompare(String(b[1])),
-  );
-
-  const oldToNewId: Record<string, string> = {};
-  const newFileIdToContent: Record<string, string> = {};
-
-  entries.forEach(([oldId, content], index) => {
-    const newId = `[[FILE_ID_${index}]]`;
-    oldToNewId[oldId] = newId;
-    newFileIdToContent[newId] = content;
-  });
-
-  vf.fileIdToContent = newFileIdToContent;
-
-  // Update fileReferences
-  if (vf.fileReferences) {
-    vf.fileReferences = vf.fileReferences.map((ref: any) => ({
-      ...ref,
-      fileId: oldToNewId[ref.fileId] ?? ref.fileId,
-    }));
-  }
-
-  // Update messageIndexToFilePathToFileId
-  if (vf.messageIndexToFilePathToFileId) {
-    for (const pathToId of Object.values(
-      vf.messageIndexToFilePathToFileId as Record<
-        string,
-        Record<string, string>
-      >,
-    )) {
-      for (const [filePath, id] of Object.entries(pathToId)) {
-        pathToId[filePath] = oldToNewId[id] ?? id;
-      }
-    }
-  }
-}
-
 export class ContextFilesPickerDialog {
   constructor(
     public page: Page,
@@ -347,21 +233,19 @@ export class PageObject {
 
   async setUp({
     autoApprove = false,
-    disableNativeGit = false,
+    nativeGit = false,
     enableAutoFixProblems = false,
-    enableBasicAgent = false,
   }: {
     autoApprove?: boolean;
-    disableNativeGit?: boolean;
+    nativeGit?: boolean;
     enableAutoFixProblems?: boolean;
-    enableBasicAgent?: boolean;
   } = {}) {
     await this.baseSetup();
     await this.goToSettingsTab();
     if (autoApprove) {
       await this.toggleAutoApprove();
     }
-    if (disableNativeGit) {
+    if (nativeGit) {
       await this.toggleNativeGit();
     }
     if (enableAutoFixProblems) {
@@ -369,22 +253,12 @@ export class PageObject {
     }
     await this.setUpTestProvider();
     await this.setUpTestModel();
+
     await this.goToAppsTab();
-    if (!enableBasicAgent) {
-      await this.selectChatMode("build");
-    }
     await this.selectTestModel();
   }
 
-  async setUpDyadPro({
-    autoApprove = false,
-    localAgent = false,
-    localAgentUseAutoModel = false,
-  }: {
-    autoApprove?: boolean;
-    localAgent?: boolean;
-    localAgentUseAutoModel?: boolean;
-  } = {}) {
+  async setUpDyadPro({ autoApprove = false }: { autoApprove?: boolean } = {}) {
     await this.baseSetup();
     await this.goToSettingsTab();
     if (autoApprove) {
@@ -392,17 +266,6 @@ export class PageObject {
     }
     await this.setUpDyadProvider();
     await this.goToAppsTab();
-    if (!localAgent) {
-      await this.selectChatMode("build");
-    }
-    // Select a non-openAI model for local agent mode,
-    // since openAI models go to the responses API.
-    if (localAgent && !localAgentUseAutoModel) {
-      await this.selectModel({
-        provider: "Anthropic",
-        model: "Claude Opus 4.5",
-      });
-    }
   }
 
   async ensurePnpmInstall() {
@@ -476,51 +339,16 @@ export class PageObject {
     await this.page.getByRole("button", { name: "Import" }).click();
   }
 
-  async selectChatMode(
-    mode: "build" | "ask" | "agent" | "local-agent" | "basic-agent",
-  ) {
+  async selectChatMode(mode: "build" | "ask" | "agent") {
     await this.page.getByTestId("chat-mode-selector").click();
-    const mapping: Record<string, string> = {
-      build: "Build Generate and edit code",
-      ask: "Ask Ask",
-      agent: "Build with MCP",
-      "local-agent": "Agent v2",
-      "basic-agent": "Basic Agent", // For free users
-    };
-    const optionName = mapping[mode];
-    await this.page
-      .getByRole("option", {
-        name: new RegExp(optionName),
-      })
-      .click();
-  }
-
-  async selectLocalAgentMode() {
-    await this.selectChatMode("local-agent");
+    await this.page.getByRole("option", { name: mode }).click();
   }
 
   async openContextFilesPicker() {
-    // Open the auxiliary actions menu
-    await this.getChatInputContainer()
-      .getByTestId("auxiliary-actions-menu")
-      .click();
-
-    // Click on "Codebase context" to open the popover
-    await this.page.getByTestId("codebase-context-trigger").click();
-
-    // Wait for the popover content to be visible
-    await this.page
-      .getByTestId("manual-context-files-input")
-      .waitFor({ state: "visible" });
-
+    const contextButton = this.page.getByTestId("codebase-context-button");
+    await contextButton.click();
     return new ContextFilesPickerDialog(this.page, async () => {
-      // Close the popover first
-      await this.page.keyboard.press("Escape");
-      // Wait a bit for the popover to close, then close the dropdown menu
-      await this.page
-        .getByTestId("manual-context-files-input")
-        .waitFor({ state: "hidden" });
-      await this.page.keyboard.press("Escape");
+      await contextButton.click();
     });
   }
 
@@ -649,13 +477,7 @@ export class PageObject {
   ////////////////////////////////
 
   async selectPreviewMode(
-    mode:
-      | "code"
-      | "problems"
-      | "preview"
-      | "configure"
-      | "security"
-      | "publish",
+    mode: "code" | "problems" | "preview" | "configure" | "security",
   ) {
     await this.page.getByTestId(`${mode}-mode-button`).click();
   }
@@ -731,24 +553,6 @@ export class PageObject {
     await this.page.getByTestId("preview-open-browser-button").click();
   }
 
-  async clickPreviewAnnotatorButton() {
-    await this.page
-      .getByTestId("preview-annotator-button")
-      .click({ timeout: Timeout.EXTRA_LONG });
-  }
-
-  async waitForAnnotatorMode() {
-    // Wait for the annotator toolbar to be visible
-    await expect(this.page.getByRole("button", { name: "Select" })).toBeVisible(
-      {
-        timeout: Timeout.MEDIUM,
-      },
-    );
-  }
-
-  async clickAnnotatorSubmit() {
-    await this.page.getByRole("button", { name: "Add to Chat" }).click();
-  }
   locateLoadingAppPreview() {
     return this.page.getByText("Preparing app preview...");
   }
@@ -771,13 +575,6 @@ export class PageObject {
     await this.page.getByRole("button", { name: "Fix error with AI" }).click();
   }
 
-  async clickCopyErrorMessage() {
-    await this.page.getByRole("button", { name: /Copy/ }).click();
-  }
-
-  async getClipboardText(): Promise<string> {
-    return await this.page.evaluate(() => navigator.clipboard.readText());
-  }
   async clickFixAllErrors() {
     await this.page.getByRole("button", { name: /Fix All Errors/ }).click();
   }
@@ -812,18 +609,6 @@ export class PageObject {
     });
   }
 
-  ////////////////////////////////
-  // Security review
-  ////////////////////////////////
-  async clickRunSecurityReview() {
-    const runSecurityReviewButton = this.page
-      .getByRole("button", { name: "Run Security Review" })
-      .first();
-    await runSecurityReviewButton.click();
-    await runSecurityReviewButton.waitFor({ state: "hidden" });
-    await this.waitForChatCompletion();
-  }
-
   async snapshotSecurityFindingsTable() {
     await expect(
       this.page.getByTestId("security-findings-table"),
@@ -834,7 +619,6 @@ export class PageObject {
     type: "all-messages" | "last-message" | "request" = "all-messages",
     { name = "", dumpIndex = -1 }: { name?: string; dumpIndex?: number } = {},
   ) {
-    await this.waitForChatCompletion();
     // Get the text content of the messages list
     const messagesListText = await this.page
       .getByTestId("messages-list")
@@ -881,47 +665,23 @@ export class PageObject {
     // Perform snapshot comparison
     const parsedDump = JSON.parse(dumpContent);
     if (type === "request") {
-      if (parsedDump["body"]["input"]) {
-        parsedDump["body"]["input"] = parsedDump["body"]["input"].map(
-          (input: any) => {
-            if (input.role === "system") {
-              input.content = "[[SYSTEM_MESSAGE]]";
-            }
-            return input;
-          },
-        );
-      }
-      if (parsedDump["body"]["messages"]) {
-        parsedDump["body"]["messages"] = parsedDump["body"]["messages"].map(
-          (message: any) => {
-            if (message.role === "system") {
-              message.content = "[[SYSTEM_MESSAGE]]";
-            }
-            return message;
-          },
-        );
-      }
-      // Normalize fileIds to be deterministic based on content
-      normalizeVersionedFiles(parsedDump);
-      // Normalize item_reference IDs (e.g., msg_1234567890) to be deterministic
-      normalizeItemReferences(parsedDump);
-      // Normalize tool_call IDs (e.g., call_1234567890_0) to be deterministic
-      normalizeToolCallIds(parsedDump);
+      parsedDump["body"]["messages"] = parsedDump["body"]["messages"].map(
+        (message: any) => {
+          if (message.role === "system") {
+            message.content = "[[SYSTEM_MESSAGE]]";
+          }
+          return message;
+        },
+      );
       expect(
         JSON.stringify(parsedDump, null, 2).replace(/\\r\\n/g, "\\n"),
       ).toMatchSnapshot(name);
       return;
     }
     expect(
-      prettifyDump(
-        // responses API
-        parsedDump["body"]["input"] ??
-          // chat completion API
-          parsedDump["body"]["messages"],
-        {
-          onlyLastMessage: type === "last-message",
-        },
-      ),
+      prettifyDump(parsedDump["body"]["messages"], {
+        onlyLastMessage: type === "last-message",
+      }),
     ).toMatchSnapshot(name);
   }
 
@@ -971,16 +731,6 @@ export class PageObject {
 
   async clickBackButton() {
     await this.page.getByRole("button", { name: "Back" }).click();
-  }
-
-  async toggleTokenBar() {
-    // Need to make sure it's NOT visible yet to avoid a race when we opened
-    // the auxiliary actions menu earlier.
-    await expect(this.page.getByTestId("token-bar-toggle")).not.toBeVisible();
-    await this.getChatInputContainer()
-      .getByTestId("auxiliary-actions-menu")
-      .click();
-    await this.page.getByTestId("token-bar-toggle").click();
   }
 
   async sendPrompt(
@@ -1071,16 +821,6 @@ export class PageObject {
     await this.page.getByRole("button", { name: "Add Model" }).click();
   }
 
-  async setUpTestProviderApiKey() {
-    // Fill in a test API key for the custom provider
-    await this.page
-      .getByPlaceholder(/Enter new.*API Key here/)
-      .fill("test-api-key-12345");
-    await this.page.getByRole("button", { name: "Save Key" }).click();
-    // Wait for the key to be saved
-    await expect(this.page.getByText("test-api-key-12345")).toBeVisible();
-  }
-
   async goToSettingsTab() {
     await this.page.getByRole("link", { name: "Settings" }).click();
   }
@@ -1146,27 +886,6 @@ export class PageObject {
     return this.getAppPath({ appName: currentAppName });
   }
 
-  async configureGitUser({
-    email = "test@example.com",
-    name = "Test User",
-    disableGpgSign = true,
-  }: {
-    email?: string;
-    name?: string;
-    disableGpgSign?: boolean;
-  } = {}) {
-    const appPath = await this.getCurrentAppPath();
-    if (!appPath) {
-      throw new Error("App path not found");
-    }
-
-    execSync(`git config user.email '${email}'`, { cwd: appPath });
-    execSync(`git config user.name '${name}'`, { cwd: appPath });
-    if (disableGpgSign) {
-      execSync("git config commit.gpgsign false", { cwd: appPath });
-    }
-  }
-
   getAppPath({ appName }: { appName: string }) {
     return path.join(this.userDataDir, "dyad-apps", appName);
   }
@@ -1227,10 +946,6 @@ export class PageObject {
     await this.page.getByRole("switch", { name: "Auto-approve" }).click();
   }
 
-  async toggleLocalAgentMode() {
-    await this.page.getByRole("switch", { name: "Enable Agent v2" }).click();
-  }
-
   async toggleNativeGit() {
     await this.page.getByRole("switch", { name: "Enable Native Git" }).click();
   }
@@ -1239,69 +954,19 @@ export class PageObject {
     await this.page.getByRole("switch", { name: "Auto-fix problems" }).click();
   }
 
-  /**
-   * Records the current settings state for later comparison.
-   * Use with `snapshotSettingsDelta()` to snapshot only what changed.
-   */
-  recordSettings(): Record<string, unknown> {
-    const settingsPath = path.join(this.userDataDir, "user-settings.json");
-    const settingsContent = fs.readFileSync(settingsPath, "utf-8");
-    return JSON.parse(settingsContent);
-  }
+  async snapshotSettings() {
+    const settings = path.join(this.userDataDir, "user-settings.json");
+    const settingsContent = fs.readFileSync(settings, "utf-8");
+    //  Sanitize the "telemetryUserId" since it's a UUID
+    const sanitizedSettingsContent = settingsContent
+      .replace(/"telemetryUserId": "[^"]*"/g, '"telemetryUserId": "[UUID]"')
+      // Don't snapshot this otherwise it'll diff with every release.
+      .replace(
+        /"lastShownReleaseNotesVersion": "[^"]*"/g,
+        '"lastShownReleaseNotesVersion": "[scrubbed]"',
+      );
 
-  /**
-   * Snapshots only the differences between the current settings and a previously recorded state.
-   * Output is in git diff style for easy reading.
-   */
-  snapshotSettingsDelta(beforeSettings: Record<string, unknown>) {
-    const afterSettings = this.recordSettings();
-
-    const diffLines: string[] = [];
-
-    const allKeys = new Set([
-      ...Object.keys(beforeSettings),
-      ...Object.keys(afterSettings),
-    ]);
-
-    // Sort keys for deterministic output
-    const sortedKeys = Array.from(allKeys).sort();
-
-    // Keys whose values should be redacted for deterministic snapshots
-    const redactedKeys: Record<string, string> = {
-      telemetryUserId: "[UUID]",
-      lastShownReleaseNotesVersion: "[scrubbed]",
-    };
-
-    for (const key of sortedKeys) {
-      const beforeValue = beforeSettings[key];
-      const afterValue = afterSettings[key];
-      const beforeExists = key in beforeSettings;
-      const afterExists = key in afterSettings;
-
-      // Format value with diff marker on each line for multiline values
-      // Redact certain keys for deterministic snapshots
-      const formatValue = (val: unknown, marker: "+" | "-") => {
-        const displayVal = key in redactedKeys ? redactedKeys[key] : val;
-        const lines = JSON.stringify(displayVal, null, 2).split("\n");
-        return lines
-          .map((line, i) => (i === 0 ? line : `${marker}   ${line}`))
-          .join("\n");
-      };
-
-      if (!beforeExists && afterExists) {
-        // Added
-        diffLines.push(`+ "${key}": ${formatValue(afterValue, "+")}`);
-      } else if (beforeExists && !afterExists) {
-        // Removed
-        diffLines.push(`- "${key}": ${formatValue(beforeValue, "-")}`);
-      } else if (JSON.stringify(beforeValue) !== JSON.stringify(afterValue)) {
-        // Changed
-        diffLines.push(`- "${key}": ${formatValue(beforeValue, "-")}`);
-        diffLines.push(`+ "${key}": ${formatValue(afterValue, "+")}`);
-      }
-    }
-
-    expect(diffLines.join("\n")).toMatchSnapshot();
+    expect(sanitizedSettingsContent).toMatchSnapshot();
   }
 
   async toggleAutoUpdate() {
@@ -1331,7 +996,7 @@ export class PageObject {
 
   async goToAppsTab() {
     await this.page.getByRole("link", { name: "Apps" }).click();
-    await expect(this.page.getByText("Build a new app")).toBeVisible();
+    await expect(this.page.getByText("Build your dream app")).toBeVisible();
   }
 
   async goToChatTab() {
@@ -1404,50 +1069,6 @@ export class PageObject {
 
   async sleep(ms: number) {
     await new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  ////////////////////////////////
-  // Agent Tool Consent Banner
-  ////////////////////////////////
-
-  getAgentConsentBanner() {
-    return this.page
-      .getByRole("button", { name: "Always allow" })
-      .locator("..");
-  }
-
-  async waitForAgentConsentBanner(timeout = Timeout.MEDIUM) {
-    await expect(
-      this.page.getByRole("button", { name: "Always allow" }),
-    ).toBeVisible({ timeout });
-  }
-
-  async clickAgentConsentAlwaysAllow() {
-    await this.page.getByRole("button", { name: "Always allow" }).click();
-  }
-
-  async clickAgentConsentAllowOnce() {
-    await this.page.getByRole("button", { name: "Allow once" }).click();
-  }
-
-  async clickAgentConsentDecline() {
-    await this.page.getByRole("button", { name: "Decline" }).click();
-  }
-
-  ////////////////////////////////
-  // Test-only: Node.js Mock Control
-  ////////////////////////////////
-
-  /**
-   * Set the mock state for Node.js installation status.
-   * @param installed - true = mock as installed, false = mock as not installed, null = use real check
-   */
-  async setNodeMock(installed: boolean | null) {
-    await this.page.evaluate(async (installed) => {
-      await (window as any).electron.ipcRenderer.invoke("test:set-node-mock", {
-        installed,
-      });
-    }, installed);
   }
 }
 

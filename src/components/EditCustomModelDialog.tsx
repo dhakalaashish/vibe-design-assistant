@@ -10,8 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ipc } from "@/ipc/types";
-import { useSettings } from "@/hooks/useSettings";
+import { IpcClient } from "@/ipc/ipc_client";
 import { useMutation } from "@tanstack/react-query";
 import { showError, showSuccess } from "@/lib/toast";
 
@@ -45,7 +44,8 @@ export function EditCustomModelDialog({
   const [description, setDescription] = useState("");
   const [maxOutputTokens, setMaxOutputTokens] = useState<string>("");
   const [contextWindow, setContextWindow] = useState<string>("");
-  const { settings, updateSettings } = useSettings();
+
+  const ipcClient = IpcClient.getInstance();
 
   useEffect(() => {
     if (model) {
@@ -81,37 +81,15 @@ export function EditCustomModelDialog({
         throw new Error("Context Window must be a valid number");
 
       // First delete the old model
-      await ipc.languageModel.deleteModel({
+      await ipcClient.deleteCustomModel({
         providerId,
         modelApiName: model.apiName,
       });
 
       // Then create the new model
-      await ipc.languageModel.createCustomModel({
-        providerId: newParams.providerId,
-        displayName: newParams.displayName,
-        apiName: newParams.apiName,
-        description: newParams.description,
-        maxOutputTokens: newParams.maxOutputTokens,
-        contextWindow: newParams.contextWindow,
-      });
+      await ipcClient.createCustomLanguageModel(newParams);
     },
-    onSuccess: async () => {
-      if (
-        settings?.selectedModel?.name === model?.apiName &&
-        settings?.selectedModel?.provider === providerId
-      ) {
-        const newModel = {
-          ...settings.selectedModel,
-          name: apiName,
-        };
-        try {
-          await updateSettings({ selectedModel: newModel });
-        } catch {
-          showError("Failed to update settings");
-          return; // stop closing dialog
-        }
-      }
+    onSuccess: () => {
       showSuccess("Custom model updated successfully!");
       onSuccess();
       onClose();

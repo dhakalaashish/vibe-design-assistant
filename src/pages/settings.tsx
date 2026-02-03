@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useTheme } from "../contexts/ThemeContext";
 import { ProviderSettingsGrid } from "@/components/ProviderSettings";
 import ConfirmationDialog from "@/components/ConfirmationDialog";
-import { ipc } from "@/ipc/types";
+import { IpcClient } from "@/ipc/ipc_client";
 import { showSuccess, showError } from "@/lib/toast";
 import { AutoApproveSwitch } from "@/components/AutoApproveSwitch";
 import { TelemetrySwitch } from "@/components/TelemetrySwitch";
@@ -20,16 +20,13 @@ import { SupabaseIntegration } from "@/components/SupabaseIntegration";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { AutoFixProblemsSwitch } from "@/components/AutoFixProblemsSwitch";
-import { AutoExpandPreviewSwitch } from "@/components/AutoExpandPreviewSwitch";
 import { AutoUpdateSwitch } from "@/components/AutoUpdateSwitch";
 import { ReleaseChannelSelector } from "@/components/ReleaseChannelSelector";
 import { NeonIntegration } from "@/components/NeonIntegration";
 import { RuntimeModeSelector } from "@/components/RuntimeModeSelector";
 import { NodePathSelector } from "@/components/NodePathSelector";
 import { ToolsMcpSettings } from "@/components/settings/ToolsMcpSettings";
-import { AgentToolsSettings } from "@/components/settings/AgentToolsSettings";
 import { ZoomSelector } from "@/components/ZoomSelector";
-import { DefaultChatModeSelector } from "@/components/DefaultChatModeSelector";
 import { useSetAtom } from "jotai";
 import { activeSettingsSectionAtom } from "@/atoms/viewAtoms";
 
@@ -48,7 +45,8 @@ export default function SettingsPage() {
   const handleResetEverything = async () => {
     setIsResetting(true);
     try {
-      await ipc.system.resetAll();
+      const ipcClient = IpcClient.getInstance();
+      await ipcClient.resetAll();
       showSuccess("Successfully reset everything. Restart the application.");
     } catch (error) {
       console.error("Error resetting:", error);
@@ -131,18 +129,6 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Agent v2 Permissions */}
-
-          <div
-            id="agent-permissions"
-            className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6"
-          >
-            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-              Agent Permissions (Pro)
-            </h2>
-            <AgentToolsSettings />
-          </div>
-
           {/* Tools (MCP) */}
           <div
             id="tools-mcp"
@@ -177,8 +163,18 @@ export default function SettingsPage() {
                   <Label htmlFor="enable-native-git">Enable Native Git</Label>
                 </div>
                 <div className="text-sm text-gray-500 dark:text-gray-400">
-                  This doesn't require any external Git installation and offers
-                  a faster, native-Git performance experience.
+                  Native Git offers faster performance but requires{" "}
+                  <a
+                    onClick={() => {
+                      IpcClient.getInstance().openExternalUrl(
+                        "https://git-scm.com/downloads",
+                      );
+                    }}
+                    className="text-blue-600 hover:underline dark:text-blue-400"
+                  >
+                    installing Git
+                  </a>
+                  .
                 </div>
               </div>
             </div>
@@ -313,11 +309,7 @@ export function WorkflowSettings() {
         Workflow Settings
       </h2>
 
-      <div className="mt-4">
-        <DefaultChatModeSelector />
-      </div>
-
-      <div className="space-y-1 mt-4">
+      <div className="space-y-1">
         <AutoApproveSwitch showToast={false} />
         <div className="text-sm text-gray-500 dark:text-gray-400">
           This will automatically approve code changes and run them.
@@ -328,13 +320,6 @@ export function WorkflowSettings() {
         <AutoFixProblemsSwitch />
         <div className="text-sm text-gray-500 dark:text-gray-400">
           This will automatically fix TypeScript errors.
-        </div>
-      </div>
-
-      <div className="space-y-1 mt-4">
-        <AutoExpandPreviewSwitch />
-        <div className="text-sm text-gray-500 dark:text-gray-400">
-          Automatically expand the preview panel when code changes are made.
         </div>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { ipc } from "@/ipc/types";
+import { IpcClient } from "@/ipc/ipc_client";
 import { showError, showSuccess } from "@/lib/toast";
 import { useAtom } from "jotai";
 import { appsListAtom } from "@/atoms/appAtoms";
@@ -9,7 +9,7 @@ export function useAddAppToFavorite() {
 
   const mutation = useMutation<boolean, Error, number>({
     mutationFn: async (appId: number): Promise<boolean> => {
-      const result = await ipc.app.addToFavorite({ appId });
+      const result = await IpcClient.getInstance().addAppToFavorite(appId);
       return result.isFavorite;
     },
     onSuccess: (newIsFavorite, appId) => {

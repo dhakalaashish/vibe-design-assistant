@@ -1,18 +1,5 @@
 - paragraph: "Connected to GitHub Repo:"
 - text: testuser/existing-app
-- combobox:
-  - img
-  - text: "Branch: new-branch"
-- button "Branch actions":
-  - img
-- img
-- heading "Branches" [level=3]
-- paragraph: Manage your branches, merge, delete, and more.
-- img
-- text: main
-- button:
-  - img
-- text: new-branch
+- paragraph: "Branch: new-branch"
 - button "Sync to GitHub"
 - button "Disconnect from repo"
-- paragraph: Successfully pushed to GitHub!

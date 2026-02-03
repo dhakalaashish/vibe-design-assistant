@@ -1,13 +1,12 @@
-import type {
-  LanguageModelV3,
-  LanguageModelV3CallOptions,
-  LanguageModelV3StreamPart,
+import {
+  LanguageModelV2,
+  LanguageModelV2CallOptions,
+  LanguageModelV2StreamPart,
 } from "@ai-sdk/provider";
-import type { LanguageModel } from "ai";
 
 // Types
 interface FallbackSettings {
-  models: Array<LanguageModel>;
+  models: Array<LanguageModelV2>;
 }
 
 interface RetryState {
@@ -18,7 +17,7 @@ interface RetryState {
 }
 
 interface StreamResult {
-  stream: ReadableStream<LanguageModelV3StreamPart>;
+  stream: ReadableStream<LanguageModelV2StreamPart>;
   request?: { body?: unknown };
   response?: { headers?: Record<string, string> };
 }
@@ -88,12 +87,12 @@ export function defaultShouldRetryThisError(error: any): boolean {
   }
 }
 
-export function createFallback(settings: FallbackSettings): LanguageModel {
+export function createFallback(settings: FallbackSettings): FallbackModel {
   return new FallbackModel(settings);
 }
 
-class FallbackModel implements LanguageModelV3 {
-  readonly specificationVersion = "v3" as const;
+export class FallbackModel implements LanguageModelV2 {
+  readonly specificationVersion = "v2";
   private readonly settings: FallbackSettings;
   private currentModelIndex: number = 0;
   private lastModelReset: number = Date.now();
@@ -115,31 +114,23 @@ class FallbackModel implements LanguageModelV3 {
   }
 
   get modelId(): string {
-    return this.getUnderlyingModel().modelId;
+    return this.getCurrentModel().modelId;
   }
 
   get provider(): string {
-    return this.getUnderlyingModel().provider;
+    return this.getCurrentModel().provider;
   }
 
   get supportedUrls():
     | Record<string, RegExp[]>
     | PromiseLike<Record<string, RegExp[]>> {
-    return this.getUnderlyingModel().supportedUrls;
+    return this.getCurrentModel().supportedUrls;
   }
 
-  private getUnderlyingModel(): LanguageModelV3 {
+  private getCurrentModel(): LanguageModelV2 {
     const model = this.settings.models[this.currentModelIndex];
     if (!model) {
       throw new Error(`Model at index ${this.currentModelIndex} not found`);
-    }
-    // The model is either a string (GatewayModelId) or LanguageModelV2/V3
-    // In this fallback context, we only support actual model instances
-    if (typeof model === "string") {
-      throw new Error("String model IDs are not supported in fallback model");
-    }
-    if (model.specificationVersion !== "v3") {
-      throw new Error("Model is not a v3 model");
     }
     return model;
   }
@@ -223,11 +214,11 @@ class FallbackModel implements LanguageModelV3 {
     throw new Error("doGenerate is not supported for fallback model");
   }
 
-  async doStream(options: LanguageModelV3CallOptions): Promise<StreamResult> {
+  async doStream(options: LanguageModelV2CallOptions): Promise<StreamResult> {
     this.checkAndResetModel();
 
     return this.retry(async (retryState) => {
-      const result = await this.getUnderlyingModel().doStream(options);
+      const result = await this.getCurrentModel().doStream(options);
 
       // Create a wrapped stream that handles errors gracefully
       const wrappedStream = this.createWrappedStream(
@@ -244,21 +235,21 @@ class FallbackModel implements LanguageModelV3 {
   }
 
   private createWrappedStream(
-    originalStream: ReadableStream<LanguageModelV3StreamPart>,
-    options: LanguageModelV3CallOptions,
+    originalStream: ReadableStream<LanguageModelV2StreamPart>,
+    options: LanguageModelV2CallOptions,
     retryState: RetryState,
-  ): ReadableStream<LanguageModelV3StreamPart> {
+  ): ReadableStream<LanguageModelV2StreamPart> {
     let hasStreamedContent = false;
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const fallbackModel = this;
 
-    return new ReadableStream<LanguageModelV3StreamPart>({
+    return new ReadableStream<LanguageModelV2StreamPart>({
       async start(controller) {
-        let reader: ReadableStreamDefaultReader<LanguageModelV3StreamPart> | null =
+        let reader: ReadableStreamDefaultReader<LanguageModelV2StreamPart> | null =
           null;
 
         const processStream = async (
-          stream: ReadableStream<LanguageModelV3StreamPart>,
+          stream: ReadableStream<LanguageModelV2StreamPart>,
         ): Promise<void> => {
           reader = stream.getReader();
 
@@ -331,7 +322,7 @@ class FallbackModel implements LanguageModelV3 {
             try {
               // Create a new stream with the next model
               const nextResult = await fallbackModel
-                .getUnderlyingModel()
+                .getCurrentModel()
                 .doStream(options);
               await processStream(nextResult.stream);
             } catch (nextError) {

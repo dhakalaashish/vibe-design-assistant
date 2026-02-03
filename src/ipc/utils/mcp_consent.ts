@@ -2,7 +2,6 @@ import { db } from "../../db";
 import { mcpToolConsents } from "../../db/schema";
 import { and, eq } from "drizzle-orm";
 import { IpcMainInvokeEvent } from "electron";
-import crypto from "node:crypto";
 
 export type Consent = "ask" | "always" | "denied";
 
@@ -91,7 +90,7 @@ export async function requireMcpToolConsent(
   if (current === "denied") return false;
 
   // Ask renderer for a decision via event bridge
-  const requestId = `${params.serverId}:${params.toolName}:${crypto.randomUUID()}`;
+  const requestId = `${params.serverId}:${params.toolName}:${Date.now()}`;
   (event.sender as any).send("mcp:tool-consent-request", {
     requestId,
     ...params,

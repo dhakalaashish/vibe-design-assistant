@@ -31,7 +31,7 @@ import { extractCodebase } from "../../utils/codebase";
 import { getDyadAppPath } from "../../paths/paths";
 import { withLock } from "../utils/lock_utils";
 import { createLoggedHandler } from "./safe_handle";
-import { ApproveProposalResult } from "@/ipc/types";
+import { ApproveProposalResult } from "../ipc_types";
 import { validateChatContext } from "../utils/context_paths_utils";
 import { readSettings } from "@/main/settings";
 
@@ -298,7 +298,9 @@ const getProposalHandler = async (
         const totalTokens = messagesTokenCount + codebaseTokenCount;
         const contextWindow = Math.min(await getContextWindow(), 100_000);
         logger.log(
-          `Token usage: ${totalTokens}/${contextWindow} (${(totalTokens / contextWindow) * 100}%)`,
+          `Token usage: ${totalTokens}/${contextWindow} (${
+            (totalTokens / contextWindow) * 100
+          }%)`,
         );
 
         // If we're using more than 80% of the context window, suggest summarizing
@@ -379,7 +381,6 @@ const approveProposalHandler = async (
   }
 
   return {
-    success: true,
     extraFiles: processResult.extraFiles,
     extraFilesError: processResult.extraFilesError,
   };

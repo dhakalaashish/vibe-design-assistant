@@ -1,9 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAtomValue } from "jotai";
 import { selectedAppIdAtom } from "@/atoms/appAtoms";
-import { ipc } from "@/ipc/types";
+import { IpcClient } from "@/ipc/ipc_client";
 import { GlobPath, ContextPathResults } from "@/lib/schemas";
-import { queryKeys } from "@/lib/queryKeys";
 
 export function useContextPaths() {
   const queryClient = useQueryClient();
@@ -14,7 +13,7 @@ export function useContextPaths() {
     isLoading,
     error,
   } = useQuery<ContextPathResults, Error>({
-    queryKey: queryKeys.contextPaths.byApp({ appId }),
+    queryKey: ["context-paths", appId],
     queryFn: async () => {
       if (!appId)
         return {
@@ -22,7 +21,8 @@ export function useContextPaths() {
           smartContextAutoIncludes: [],
           excludePaths: [],
         };
-      return ipc.context.getContextPaths({ appId });
+      const ipcClient = IpcClient.getInstance();
+      return ipcClient.getChatContextResults({ appId });
     },
     enabled: !!appId,
   });
@@ -42,7 +42,8 @@ export function useContextPaths() {
       excludePaths,
     }) => {
       if (!appId) throw new Error("No app selected");
-      return ipc.context.setContextPaths({
+      const ipcClient = IpcClient.getInstance();
+      return ipcClient.setChatContext({
         appId,
         chatContext: {
           contextPaths,
@@ -52,9 +53,7 @@ export function useContextPaths() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.contextPaths.byApp({ appId }),
-      });
+      queryClient.invalidateQueries({ queryKey: ["context-paths", appId] });
     },
   });
 

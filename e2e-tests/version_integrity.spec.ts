@@ -1,10 +1,10 @@
-import { PageObject, testSkipIfWindows, Timeout } from "./helpers/test_helper";
-import { expect } from "@playwright/test";
+import { PageObject, testSkipIfWindows } from "./helpers/test_helper";
+
 import * as eph from "electron-playwright-helpers";
 import path from "node:path";
 
 const runVersionIntegrityTest = async (po: PageObject, nativeGit: boolean) => {
-  await po.setUp({ autoApprove: true, disableNativeGit: !nativeGit });
+  await po.setUp({ autoApprove: true, nativeGit });
 
   // Importing a simple app with a few files.
   await po.page.getByRole("button", { name: "Import App" }).click();
@@ -37,11 +37,9 @@ const runVersionIntegrityTest = async (po: PageObject, nativeGit: boolean) => {
   await po.page.getByText("Init Dyad app Restore").click();
   await po.snapshotAppFiles({ name: "v1" });
 
-  const restoreButton = po.page.getByRole("button", {
-    name: "Restore to this version",
-  });
-  await restoreButton.click();
-  await expect(restoreButton).not.toBeVisible({ timeout: Timeout.LONG });
+  await po.page
+    .getByRole("button", { name: "Restore to this version" })
+    .click();
   // Should be same as the previous snapshot, but just to be sure.
   await po.snapshotAppFiles({ name: "v1" });
 };
