@@ -584,3 +584,71 @@ export async function processFullResponseActions(
     }
   }
 }
+
+
+// DESIGN SEMANTIC FILE PROCESSOR
+/**
+ * Processes model output intended ONLY for DESIGN_SEMANTIC.md.
+ *
+ * Contract:
+ * - Model output MUST contain exactly one <dyad-write> tag
+ * - The write path MUST be DESIGN_SEMANTIC.md
+ * - All other tags or paths are ignored
+ * - No DB, no git, no UI side effects
+ */
+// In response_processor.ts, MODIFY processDesignSemanticResponse:
+export async function processDesignSemanticResponse({
+  fullResponse,
+  appPath,
+}: {
+  fullResponse: string;
+  appPath: string;
+}) {
+  logger.log('=== PROCESS DESIGN SEMANTIC RESPONSE START ===');
+  logger.log(`Received fullResponse length: ${fullResponse?.length || 0}`);
+  logger.log(`App path: ${appPath}`);
+  logger.log(`Full response content:\n${fullResponse}`);
+  
+  if (!fullResponse) {
+    logger.error('CRITICAL: fullResponse is empty/undefined!');
+    return;
+  }
+
+  // Parse dyad-write tags
+  const writeTags = getDyadWriteTags(fullResponse);
+  logger.log(`Found ${writeTags.length} dyad-write tags`);
+
+  // HARD GUARD 1: exactly one write
+  if (writeTags.length !== 1) {
+    logger.error(`GUARD FAILED: Expected 1 dyad-write tag, got ${writeTags.length}`);
+    if (writeTags.length > 0) {
+      logger.log('Tags found:', writeTags.map(t => ({ path: t.path, contentLength: t.content.length })));
+    }
+    return;
+  }
+
+  const write = writeTags[0];
+  logger.log(`Write tag path: "${write.path}"`);
+  logger.log(`Write tag content length: ${write.content.length}`);
+
+  // Normalize allowed path
+  const allowedPath = "DESIGN_SEMANTIC.md";
+
+  // HARD GUARD 2: exact file match
+  if (write.path !== allowedPath) {
+    logger.error(`GUARD FAILED: Expected path "${allowedPath}", got "${write.path}"`);
+    return;
+  }
+
+  // Resolve absolute path safely
+  const absolutePath = safeJoin(appPath, allowedPath);
+  logger.log(`Absolute file path: ${absolutePath}`);
+
+  // Ensure parent directory exists
+  fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
+
+  // Write file (overwrite semantics is intended)
+  fs.writeFileSync(absolutePath, write.content, "utf8");
+  logger.log(`Successfully wrote DESIGN_SEMANTIC.md (${write.content.length} bytes)`);
+  logger.log('=== PROCESS DESIGN SEMANTIC RESPONSE COMPLETE ===');
+}

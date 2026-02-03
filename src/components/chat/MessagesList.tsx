@@ -59,27 +59,32 @@ export const MessagesList = forwardRef<HTMLDivElement, MessagesListProps>(
       return null;
     };
 
+    const setupBanner = renderSetupBanner();
+
     return (
       <div
         className="absolute inset-0 overflow-y-auto p-4"
         ref={ref}
         data-testid="messages-list"
       >
-        {messages.length > 0
-          ? messages.map((message, index) => (
-              <ChatMessage
-                key={index}
-                message={message}
-                isLastMessage={index === messages.length - 1}
-              />
-            ))
-          : !renderSetupBanner() && (
-              <div className="flex flex-col items-center justify-center h-full max-w-2xl mx-auto">
-                <div className="flex flex-1 items-center justify-center text-gray-500">
-                  No messages yet
-                </div>
+        {messages.length > 0 ? (
+          messages.map((message, index) => (
+            <ChatMessage
+              key={index}
+              message={message}
+              isLastMessage={index === messages.length - 1}
+            />
+          ))
+        ) : (
+          setupBanner || (
+            <div className="flex flex-col items-center justify-center h-full max-w-2xl mx-auto">
+              <div className="flex flex-1 items-center justify-center text-gray-500">
+                No messages yet
               </div>
-            )}
+            </div>
+          )
+        )}
+        
         {/* Show context limit banner when close to token limit */}
         {!isStreaming && tokenCountResult && (
           <ContextLimitBanner
@@ -266,7 +271,6 @@ export const MessagesList = forwardRef<HTMLDivElement, MessagesListProps>(
             />
           )}
         <div ref={messagesEndRef} />
-        {renderSetupBanner()}
       </div>
     );
   },

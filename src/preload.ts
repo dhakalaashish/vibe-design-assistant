@@ -20,6 +20,7 @@ const validInvokeChannels = [
   "chat:stream",
   "chat:count-tokens",
   "create-chat",
+  "chat:insert-message", // Adding this to preload
   "create-app",
   "copy-app",
   "get-chat",
@@ -135,6 +136,7 @@ const validInvokeChannels = [
   "add-to-favorite",
   "github:clone-repo-from-url",
   "get-latest-security-review",
+  "get-latest-auto-build",
   // Test-only channels
   // These should ALWAYS be guarded with IS_TEST_BUILD in the main process.
   // We can't detect with IS_TEST_BUILD in the preload script because

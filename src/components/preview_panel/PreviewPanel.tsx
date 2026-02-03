@@ -7,6 +7,7 @@ import {
 } from "../../atoms/appAtoms";
 
 import { CodeView } from "./CodeView";
+import { DesignView } from "./DesignView";
 import { PreviewIframe } from "./PreviewIframe";
 import { Problems } from "./Problems";
 import { ConfigurePanel } from "./ConfigurePanel";
@@ -17,6 +18,7 @@ import { Console } from "./Console";
 import { useRunApp } from "@/hooks/useRunApp";
 import { PublishPanel } from "./PublishPanel";
 import { SecurityPanel } from "./SecurityPanel";
+import { AutoBuildPanel } from "./AutoBuildPanel";
 
 interface ConsoleHeaderProps {
   isOpen: boolean;
@@ -114,6 +116,10 @@ export function PreviewPanel() {
             <div className="h-full overflow-y-auto">
               {previewMode === "preview" ? (
                 <PreviewIframe key={key} loading={loading} />
+              ) : previewMode === "design" ? (
+                <DesignView loading={loading} app={app} />
+              ) : previewMode === "auto-build" ? (
+                <AutoBuildPanel />
               ) : previewMode === "code" ? (
                 <CodeView loading={loading} app={app} />
               ) : previewMode === "configure" ? (

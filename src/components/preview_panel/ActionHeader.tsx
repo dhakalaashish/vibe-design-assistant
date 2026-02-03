@@ -12,6 +12,8 @@ import {
   Wrench,
   Globe,
   Shield,
+  Palette,
+  Notebook
 } from "lucide-react";
 import { ChatActivityButton } from "@/components/chat/ChatActivity";
 import { motion } from "framer-motion";
@@ -37,6 +39,8 @@ import { isPreviewOpenAtom } from "@/atoms/viewAtoms";
 
 export type PreviewMode =
   | "preview"
+  | "design"
+  | "auto-build"
   | "code"
   | "problems"
   | "configure"
@@ -49,6 +53,8 @@ export const ActionHeader = () => {
   const [isPreviewOpen, setIsPreviewOpen] = useAtom(isPreviewOpenAtom);
   const selectedAppId = useAtomValue(selectedAppIdAtom);
   const previewRef = useRef<HTMLButtonElement>(null);
+  const designRef = useRef<HTMLButtonElement>(null);
+  const autoBuildRef = useRef<HTMLButtonElement>(null);
   const codeRef = useRef<HTMLButtonElement>(null);
   const problemsRef = useRef<HTMLButtonElement>(null);
   const configureRef = useRef<HTMLButtonElement>(null);
@@ -126,6 +132,12 @@ export const ActionHeader = () => {
       switch (previewMode) {
         case "preview":
           targetRef = previewRef;
+          break;
+        case "design":
+          targetRef = designRef;
+          break;
+        case "auto-build":
+          targetRef = autoBuildRef;
           break;
         case "code":
           targetRef = codeRef;
@@ -229,6 +241,20 @@ export const ActionHeader = () => {
             <Eye size={iconSize} />,
             "Preview",
             "preview-mode-button",
+          )}
+          {renderButton(
+            "design",
+            designRef,
+            <Palette size={iconSize} />,
+            "Design",
+            "design-mode-button",
+          )}
+          {renderButton(
+            "auto-build",
+            autoBuildRef,
+            <Notebook size={iconSize} />,
+            "AutoBuild",
+            "auto-build-mode-button",
           )}
           {renderButton(
             "problems",

@@ -493,6 +493,22 @@ export class IpcClient {
     await this.ipcRenderer.invoke("delete-chat", chatId);
   }
 
+  public async insertMessage({
+    chatId,
+    role,
+    content,
+  }: {
+    chatId: number;
+    role: "user" | "assistant" | "system";
+    content: string;
+  }): Promise<Message> {
+    return this.ipcRenderer.invoke("chat:insert-message", {
+      chatId,
+      role,
+      content,
+    });
+  }
+
   public async deleteMessages(chatId: number): Promise<void> {
     await this.ipcRenderer.invoke("delete-messages", chatId);
   }
@@ -1199,6 +1215,12 @@ export class IpcClient {
     appId: number,
   ): Promise<SecurityReviewResult> {
     return this.ipcRenderer.invoke("get-latest-security-review", appId);
+  }
+
+  public async getLatestAutoBuild(
+    appId: number,
+  ): Promise<SecurityReviewResult> {
+    return this.ipcRenderer.invoke("get-latest-auto-build", appId);
   }
 
   public async importApp(params: ImportAppParams): Promise<ImportAppResult> {

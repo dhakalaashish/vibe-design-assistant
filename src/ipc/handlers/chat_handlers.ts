@@ -60,6 +60,33 @@ export function registerChatHandlers() {
     return chat.id;
   });
 
+  // Handler for inserting a standalone message (e.g. for initial greeting)
+  handle(
+    "chat:insert-message",
+    async (
+      _,
+      {
+        chatId,
+        role,
+        content,
+      }: {
+        chatId: number;
+        role: "user" | "assistant";
+        content: string;
+      },
+    ) => {
+      const [insertedMessage] = await db
+        .insert(messages)
+        .values({
+          chatId,
+          role,
+          content,
+        })
+        .returning();
+      return insertedMessage;
+    },
+  );
+
   ipcMain.handle("get-chat", async (_, chatId: number) => {
     const chat = await db.query.chats.findFirst({
       where: eq(chats.id, chatId),
