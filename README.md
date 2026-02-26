@@ -13,7 +13,7 @@ Get the assistant running locally with your Dyad instance.
 
 1.  **Clone the Repository**
     ```bash
-    git clone [https://github.com/your-username/vibe-design-assistant.git](https://github.com/your-username/vibe-design-assistant.git)
+    git clone https://github.com/dhakalaashish/vibe-design-assistant.git
     cd vibe-design-assistant
     ```
 
