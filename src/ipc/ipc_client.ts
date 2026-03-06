@@ -1217,10 +1217,10 @@ export class IpcClient {
     return this.ipcRenderer.invoke("get-latest-security-review", appId);
   }
 
-  public async getLatestAutoBuild(
+  public async getLatestGuidedBuild(
     appId: number,
   ): Promise<SecurityReviewResult> {
-    return this.ipcRenderer.invoke("get-latest-auto-build", appId);
+    return this.ipcRenderer.invoke("get-latest-guided-build", appId);
   }
 
   public async importApp(params: ImportAppParams): Promise<ImportAppResult> {

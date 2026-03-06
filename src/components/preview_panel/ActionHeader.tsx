@@ -40,7 +40,7 @@ import { isPreviewOpenAtom } from "@/atoms/viewAtoms";
 export type PreviewMode =
   | "preview"
   | "design"
-  | "auto-build"
+  | "guided-build"
   | "code"
   | "problems"
   | "configure"
@@ -54,7 +54,7 @@ export const ActionHeader = () => {
   const selectedAppId = useAtomValue(selectedAppIdAtom);
   const previewRef = useRef<HTMLButtonElement>(null);
   const designRef = useRef<HTMLButtonElement>(null);
-  const autoBuildRef = useRef<HTMLButtonElement>(null);
+  const guidedBuildRef = useRef<HTMLButtonElement>(null);
   const codeRef = useRef<HTMLButtonElement>(null);
   const problemsRef = useRef<HTMLButtonElement>(null);
   const configureRef = useRef<HTMLButtonElement>(null);
@@ -136,8 +136,8 @@ export const ActionHeader = () => {
         case "design":
           targetRef = designRef;
           break;
-        case "auto-build":
-          targetRef = autoBuildRef;
+        case "guided-build":
+          targetRef = guidedBuildRef;
           break;
         case "code":
           targetRef = codeRef;
@@ -250,11 +250,11 @@ export const ActionHeader = () => {
             "design-mode-button",
           )}
           {renderButton(
-            "auto-build",
-            autoBuildRef,
+            "guided-build",
+            guidedBuildRef,
             <Notebook size={iconSize} />,
-            "AutoBuild",
-            "auto-build-mode-button",
+            "GuidedBuild",
+            "guided-build-mode-button",
           )}
           {renderButton(
             "problems",

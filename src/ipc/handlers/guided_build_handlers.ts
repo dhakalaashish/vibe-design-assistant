@@ -4,13 +4,13 @@ import { chats, messages } from "../../db/schema";
 import { eq, and, like, desc } from "drizzle-orm";
 import type { SecurityReviewResult, SecurityFinding } from "../ipc_types";
 
-export function registerAutoBuildHandlers() {
-  ipcMain.handle("get-latest-auto-build", async (event, appId: number) => {
+export function registerGuidedBuildHandlers() {
+  ipcMain.handle("get-latest-guided-build", async (event, appId: number) => {
     if (!appId) {
       throw new Error("App ID is required");
     }
 
-    // Query for the most recent message with Auto Build / Gap Analysis findings
+    // Query for the most recent message with Guided Build / Gap Analysis findings
     // We look for the <dyad-gap-analysis> tag
     const result = await db
       .select({
@@ -31,7 +31,7 @@ export function registerAutoBuildHandlers() {
       .limit(1);
 
     if (result.length === 0) {
-      throw new Error("No auto build analysis found for this app");
+      throw new Error("No guided build analysis found for this app");
     }
 
     const message = result[0];

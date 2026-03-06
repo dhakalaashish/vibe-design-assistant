@@ -27,8 +27,8 @@ export function ChatModeSelector() {
   const handleModeChange = (value: string) => {
     updateSettings({ selectedChatMode: value as ChatMode });
 
-    // DESIGN: when clicked on "Guided Build", the Design PreviewMode is toggled
-    if (value === "guided") {
+    // DESIGN: when clicked on "Improve Prompt", the Design PreviewMode is toggled
+    if (value === "improve_prompt") {
       setPreviewMode("design");
     }
   };
@@ -41,8 +41,8 @@ export function ChatModeSelector() {
         return "Ask";
       case "agent":
         return "Agent";
-      case "guided":
-        return "Guided Build"
+      case "improve_prompt":
+        return "Improve Prompt"
       default:
         return "Build";
     }
@@ -84,9 +84,9 @@ export function ChatModeSelector() {
             </span>
           </div>
         </SelectItem>
-        <SelectItem value="guided">
+        <SelectItem value="improve_prompt">
           <div className="flex flex-col items-start">
-            <span className="font-medium">Guided Build</span>
+            <span className="font-medium">Improve Prompt</span>
             <span className="text-xs text-muted-foreground">
               Improve prompt for better design
             </span>

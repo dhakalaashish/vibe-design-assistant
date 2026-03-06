@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { IpcClient } from "@/ipc/ipc_client";
 
-export function useAutoBuild(appId: number | null) {
+export function useGuidedBuild(appId: number | null) {
   return useQuery({
-    queryKey: ["auto-build", appId], // Unique key for caching
+    queryKey: ["guided-build", appId], // Unique key for caching
     queryFn: async () => {
       if (!appId) {
         throw new Error("App ID is required");
@@ -11,7 +11,7 @@ export function useAutoBuild(appId: number | null) {
       const ipcClient = IpcClient.getInstance();
       // Assuming you will implement this method in IpcClient
       // It should return the gap analysis findings
-      return ipcClient.getLatestAutoBuild(appId);
+      return ipcClient.getLatestGuidedBuild(appId);
     },
     enabled: appId !== null,
     retry: false,

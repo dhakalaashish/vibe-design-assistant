@@ -166,11 +166,11 @@ export function ChatInput({ chatId }: { chatId?: number }) {
 
     // Check if must handleImprove Prompt
 
-    if (settings?.selectedChatMode === "guided") {
+    if (settings?.selectedChatMode === "improve_prompt") {
       const currentChat = chats.find(c => c.id === chatId);
       const title = currentChat?.title || "";
       
-      // If we are NOT already in a special guided session
+      // If we are NOT already in a special improve_prompt session
       const isSpecialSession = title.startsWith(DESIGN_BUILD_TITLE_PREFIX) || title.startsWith(PROMPT_IMPROVEMENT_TITLE_PREFIX);
       
       if (!isSpecialSession) {

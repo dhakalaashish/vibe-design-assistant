@@ -509,7 +509,7 @@ export const constructSystemPrompt = ({
   enableTurboEditsV2,
 }: {
   aiRules: string | undefined;
-  chatMode?: "build" | "guided" | "ask" | "agent";
+  chatMode?: "build" | "improve_prompt" | "ask" | "agent";
   enableTurboEditsV2: boolean;
 }) => {
   const systemPrompt = getSystemPromptForChatMode({
@@ -523,7 +523,7 @@ export const getSystemPromptForChatMode = ({
   chatMode,
   enableTurboEditsV2,
 }: {
-  chatMode: "build" | "guided" | "ask" | "agent";
+  chatMode: "build" | "improve_prompt" | "ask" | "agent";
   enableTurboEditsV2: boolean;
 }) => {
   if (chatMode === "agent") {

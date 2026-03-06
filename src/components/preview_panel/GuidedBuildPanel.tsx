@@ -1,10 +1,10 @@
 import { useAtomValue, useSetAtom } from "jotai";
 import { selectedAppIdAtom } from "@/atoms/appAtoms";
 import { selectedChatIdAtom } from "@/atoms/chatAtoms";
-// You might need to create a useAutoBuild hook similar to useSecurityReview,
+// You might need to create a useGuidedBuild hook similar to useSecurityReview,
 // or reuse useSecurityReview if the backend returns the same structure but with different data.
 // For now, I'll assume we adapt useSecurityReview or you rename it later.
-import { useAutoBuild } from "@/hooks/useAutoBuild";
+import { useGuidedBuild } from "@/hooks/useGuidedBuild";
 import { IpcClient } from "@/ipc/ipc_client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,14 +32,14 @@ import { useStreamChat } from "@/hooks/useStreamChat";
 import { showError, showSuccess, showWarning } from "@/lib/toast";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import type { SecurityFinding, SecurityReviewResult } from "@/ipc/ipc_types"; // You'll likely define AutoBuildFinding types later
+import type { SecurityFinding, SecurityReviewResult } from "@/ipc/ipc_types"; // You'll likely define GuidedBuildFinding types later
 import { useState, useEffect } from "react";
 import { VanillaMarkdownParser } from "@/components/chat/DyadMarkdownParser";
 import { useLoadAppFile } from "@/hooks/useLoadAppFile";
 import { useQueryClient } from "@tanstack/react-query";
 
-// --- ADAPTED TYPES & HELPERS FOR AUTO BUILD ---
-export const AUTO_BUILD_TITLE_PREFIX = "# Auto Build"
+// --- ADAPTED TYPES & HELPERS FOR GUIDED BUILD ---
+export const GUIDED_BUILD_TITLE_PREFIX = "# Guided Build"
 
 // Mapping "status" from the prompt (missing, partial, violation) to UI
 const getStatusColor = (status: string) => {
@@ -129,7 +129,7 @@ function StatusBadge({ status }: { status: string }) {
     );
 }
 
-function RunAutoBuildButton({
+function RunGuidedBuildButton({
     isRunning,
     onRun,
 }: {
@@ -160,7 +160,7 @@ function RunAutoBuildButton({
             ) : (
                 <>
                     <Hammer className="w-4 h-4" />
-                    Run Auto Build Analysis
+                    Run Guided Build Analysis
                 </>
             )}
         </Button>
@@ -208,7 +208,7 @@ function ReviewSummary({ data }: { data: SecurityReviewResult }) {
     );
 }
 
-function AutoBuildHeader({
+function GuidedBuildHeader({
     isRunning,
     onRun,
     data,
@@ -245,7 +245,7 @@ function AutoBuildHeader({
                 <div>
                     <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-1 flex items-center gap-2">
                         <Hammer className="w-5 h-5" />
-                        Auto Build
+                        Guided Build
                         <Badge variant="secondary" className="uppercase tracking-wide">
                             beta
                         </Badge>
@@ -307,7 +307,7 @@ function AutoBuildHeader({
                                 </>
                             )}
                         </Button>
-                        <RunAutoBuildButton isRunning={isRunning} onRun={onRun} />
+                        <RunGuidedBuildButton isRunning={isRunning} onRun={onRun} />
                     </div>
                 </div>
             </div>
@@ -356,7 +356,7 @@ function NoAppSelectedView() {
                 No App Selected
             </h2>
             <p className="text-gray-600 dark:text-gray-400 max-w-md">
-                Select an app to run Auto Build analysis.
+                Select an app to run Guided Build analysis.
             </p>
         </div>
     );
@@ -418,9 +418,9 @@ function NoReviewCard({
                         No Analysis Found
                     </h3>
                     <p className="text-gray-600 dark:text-gray-400 mb-4">
-                        Run Auto Build to find missing features and deviations from your design specs.
+                        Run Guided Build to find missing features and deviations from your design specs.
                     </p>
-                    <RunAutoBuildButton isRunning={isRunning} onRun={onRun} />
+                    <RunGuidedBuildButton isRunning={isRunning} onRun={onRun} />
                 </div>
             </CardContent>
         </Card>
@@ -482,7 +482,7 @@ function FindingsTable({
     return (
         <div
             className="border rounded-lg overflow-hidden"
-            data-testid="autobuild-findings-table"
+            data-testid="guidedbuild-findings-table"
         >
             <table className="w-full">
                 <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
@@ -686,14 +686,14 @@ function FindingDetailsDialog({
     );
 }
 
-export const AutoBuildPanel = () => {
+export const GuidedBuildPanel = () => {
     const selectedAppId = useAtomValue(selectedAppIdAtom);
     const setSelectedChatId = useSetAtom(selectedChatIdAtom);
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const { streamMessage } = useStreamChat({ hasChatId: false });
-    // Using useSecurityReview hook but interpreting the data as AutoBuild data
-    const { data, isLoading, error, refetch } = useAutoBuild(selectedAppId);
+    // Using useSecurityReview hook but interpreting the data as GuidedBuild data
+    const { data, isLoading, error, refetch } = useGuidedBuild(selectedAppId);
     const [isRunningReview, setIsRunningReview] = useState(false);
     const [detailsOpen, setDetailsOpen] = useState(false);
     const [detailsFinding, setDetailsFinding] = useState<SecurityFinding | null>(
@@ -765,7 +765,7 @@ export const AutoBuildPanel = () => {
         setDetailsOpen(true);
     };
 
-    const handleRunAutoBuild = async () => {
+    const handleRunGuidedBuild = async () => {
         if (!selectedAppId) {
             showError("No app selected");
             return;
@@ -779,15 +779,15 @@ export const AutoBuildPanel = () => {
             // Rename the new chat to 
             await IpcClient.getInstance().updateChat({
                 chatId: chatId,
-                title: `${AUTO_BUILD_TITLE_PREFIX}`,
+                title: `${GUIDED_BUILD_TITLE_PREFIX}`,
             });
             // Navigate to the new chat
             setSelectedChatId(chatId);
             await navigate({ to: "/chat", search: { id: chatId } });
 
-            // Stream the auto-build prompt (maps to CONTINUE_USING_DESIGN_SEMANTIC in backend)
+            // Stream the guided-build prompt (maps to CONTINUE_USING_DESIGN_SEMANTIC in backend)
             await streamMessage({
-                prompt: "/auto-build",
+                prompt: "/guided-build",
                 chatId,
                 onSettled: () => {
                     refetch(); // Refetch findings
@@ -795,7 +795,7 @@ export const AutoBuildPanel = () => {
                 },
             });
         } catch (err) {
-            showError(`Failed to run auto build analysis: ${err}`);
+            showError(`Failed to run guided build analysis: ${err}`);
             setIsRunningReview(false);
         }
     };
@@ -818,7 +818,7 @@ export const AutoBuildPanel = () => {
 
             // Extract the tasks from the description (assuming the backend puts <dyad-tasks> inside description)
             // or construct a generic prompt if not explicit.
-            const prompt = `I am ready to implement this feature gap identified in the Auto Build analysis:
+            const prompt = `I am ready to implement this feature gap identified in the Guided Build analysis:
 
 **${finding.title}** (${finding.level})
 
@@ -893,7 +893,7 @@ Please implement the tasks defined above.`;
                 )
                 .join("\n\n");
 
-            const prompt = `Please implement the following ${findingsToBuild.length} feature gap${findingsToBuild.length !== 1 ? "s" : ""} identified in the Auto Build analysis:
+            const prompt = `Please implement the following ${findingsToBuild.length} feature gap${findingsToBuild.length !== 1 ? "s" : ""} identified in the Guided Build analysis:
 
 ${issuesList}`;
 
@@ -922,9 +922,9 @@ ${issuesList}`;
     return (
         <div className="flex flex-col h-full overflow-y-auto">
             <div className="p-4 pt-0 space-y-4">
-                <AutoBuildHeader
+                <GuidedBuildHeader
                     isRunning={isRunningReview}
-                    onRun={handleRunAutoBuild}
+                    onRun={handleRunGuidedBuild}
                     data={data}
                     onOpenEditDesign={() => {
                         setIsEditDesignOpen(true);
@@ -942,7 +942,7 @@ ${issuesList}`;
                 ) : error ? (
                     <NoReviewCard
                         isRunning={isRunningReview}
-                        onRun={handleRunAutoBuild}
+                        onRun={handleRunGuidedBuild}
                     />
                 ) : data && data.findings.length > 0 ? (
                     <FindingsTable
@@ -971,7 +971,7 @@ ${issuesList}`;
                         </DialogHeader>
                         <div className="text-sm text-gray-600 dark:text-gray-400">
                             This defines the core requirements and invariants for your application.
-                            Changes here will affect future Auto Build analyses. Saved to{" "}
+                            Changes here will affect future Guided Build analyses. Saved to{" "}
                             <code className="text-xs">DESIGN_SEMANTIC.md</code>.
                         </div>
                         <div className="mt-3">

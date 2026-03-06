@@ -39,6 +39,41 @@ Existing vibe coding tools focus exclusively on **code correctness**. VDA treats
 1. **Convergence is Prevented**: VDA pushes back against shallow design patterns [20] by offering principled alternatives.
 2. **Rationales are Explicit**: Instead of silent generation, VDA explains the "Why" behind its suggestions, supporting user learning (RQ1a).
 3. **Intent is Preserved**: By maintaining a virtual "prior" design, VDA ensures that long-horizon consistency is maintained even across hundreds of prompts.
+## 🛠 How to Use: The "Improve Prompt" Workflow
+
+The core feature of VDA is the **Improve Prompt** mode. Unlike standard chat where you hope the AI understands, Improve Prompt ensures the AI *understands* before it codes.
+
+### 1. Select "Improve Prompt"
+In the chat interface, toggle the mode to **Improve Prompt**. This activates the Design context.
+
+### 2. The Check: Do you have a Blueprint?
+When you try to chat in Improve Prompt mode, VDA checks for a `DESIGN_SEMANTIC.md` file in your project root.
+* **If missing:** The system will pause and ask you to create one (see *Creating Your Design Semantics* below).
+* **If present:** The Prompt Improvement session begins.
+
+### 3. Prompt Improvement Session
+Instead of generating code immediately, VDA acts as a **Senior UX Researcher**:
+1.  **Analysis:** It checks your prompt against your Design Semantics (your app's rules) and Design Heuristics (general UX laws).
+2.  **Refinement:** If your prompt is vague or violates a rule (e.g., "Add a delete button" violates your "Safety" rule requiring a confirmation modal), VDA will interview you to refine it.
+3.  **The "Done" Button:** Once you and the AI agree on the perfect, design-hardened prompt, click the **Done** button.
+4.  **Execution:** VDA navigates back to the build chat and executes that optimized prompt to generate the code.
+
+---
+
+## 🔄 Guided Build: The Self-Healing Loop
+
+Guided Build is the QA (Quality Assurance) engine of VDA. It performs a **Gap Analysis** to ensure your codebase ("The Reality") matches your `DESIGN_SEMANTIC.md` ("The Spec").
+
+### Why use Guided Build?
+Over time, as you add features, you might accidentally break old rules or leave flows incomplete. Guided Build catches these discrepancies.
+
+### How it Works
+1.  **Run Analysis:** Click the **Guided Build** tab and hit "Run Analysis."
+2.  **Gap Detection:** VDA scans your project and categorizes findings into:
+    * 🔴 **Violations:** Code that explicitly breaks a rule (e.g., "Max 5 tasks" rule ignored).
+    * 🟠 **Missing:** Features listed in your Design File that don't exist in the code yet.
+    * 🟡 **Partial:** Features that exist but lack key functionality (e.g., a button exists but does nothing).
+3.  **One-Click Fix:** For every gap found, VDA generates a specific "Build Task." You can click **"Build This"** to instantly generate the code required to close that gap.
 
 ---
 
@@ -61,3 +96,5 @@ If you use this tool or reference this methodology in your research, please cite
 ---
 
 > "Vibe coding isn't just about writing code; it's about maintaining a consistent intent in a probabilistic environment."
+## Vibe Coding Tip: 
+Treat your `DESIGN_SEMANTIC.md` as the source of truth. If you want to change how the app behaves fundamentally, edit the Semantic file first, then let VDA guide the code updates via Guided Build.

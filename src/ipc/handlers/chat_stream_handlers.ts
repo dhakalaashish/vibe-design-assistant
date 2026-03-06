@@ -731,8 +731,8 @@ ${componentSnippet}
           isCodebaseNeeded = true;
         }
 
-        const isAutoBuildIntent = req.prompt.startsWith("/auto-build");
-        if (isAutoBuildIntent) {
+        const isGuidedBuildIntent = req.prompt.startsWith("/guided-build");
+        if (isGuidedBuildIntent) {
           // Use the Gap Analysis prompt, injecting the design semantics content
           systemPrompt = gap_analysis_with_design_semantic_prompt(designSemanticFileContent);
           isCodebaseNeeded = true; 
