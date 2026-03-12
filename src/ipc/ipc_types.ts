@@ -21,6 +21,20 @@ export interface SecurityReviewResult {
   chatId: number;
 }
 
+export interface GuidedBuildFinding {
+  title: string;
+  level: "critical" | "high" | "medium" | "low";
+  description: string;
+  isBuilt?: boolean;
+  isVerified?: boolean;
+}
+
+export interface GuidedBuildReviewResult {
+  findings: GuidedBuildFinding[];
+  timestamp: string;
+  chatId: number;
+}
+
 export interface RespondToAppInputParams {
   appId: number;
   response: string;

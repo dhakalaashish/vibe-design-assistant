@@ -70,6 +70,8 @@ import type {
   SupabaseBranch,
   SetSupabaseAppProjectParams,
   SelectNodeFolderResult,
+  SecurityFinding,
+  GuidedBuildFinding,
 } from "./ipc_types";
 import type { Template } from "../shared/templates";
 import type {
@@ -1221,6 +1223,19 @@ export class IpcClient {
     appId: number,
   ): Promise<SecurityReviewResult> {
     return this.ipcRenderer.invoke("get-latest-guided-build", appId);
+  }
+
+  public async updateGuidedBuildFinding(
+    appId: number, 
+    originalTitle: string, 
+    updatedFinding: GuidedBuildFinding
+  ): Promise<boolean> {
+    return this.ipcRenderer.invoke(
+      "update-guided-build-finding",
+      appId,
+      originalTitle,
+      updatedFinding
+    );
   }
 
   public async importApp(params: ImportAppParams): Promise<ImportAppResult> {
