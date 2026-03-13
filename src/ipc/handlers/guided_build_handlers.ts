@@ -3,6 +3,7 @@ import { db } from "../../db";
 import { chats, messages } from "../../db/schema";
 import { eq, and, like, desc } from "drizzle-orm";
 import type { GuidedBuildReviewResult, GuidedBuildFinding } from "../ipc_types";
+import { activeStreams } from "@/ipc/handlers/chat_stream_handlers";
 
 export function registerGuidedBuildHandlers() {
   ipcMain.handle("get-latest-guided-build", async (event, appId: number) => {
@@ -36,14 +37,33 @@ export function registerGuidedBuildHandlers() {
     }
 
     let messageContent = result[0].content;
+    let contentChanged = false;
 
-    // INJECTION LOGIC: If the message doesn't have tracking tags, inject them and save.
+    // 1. INJECTION LOGIC: If the message doesn't have tracking tags, inject them and save.
     if (!messageContent.includes("<dyad-check-build>")) {
       messageContent = messageContent.replace(
         /<\/dyad-gap-analysis>/g,
-        "<dyad-check-build>false</dyad-check-build>\n<dyad-check-completion>false</dyad-check-completion>\n</dyad-gap-analysis>"
+        "<dyad-check-build>false</dyad-check-build>\n<dyad-check-completion>false</dyad-check-completion>\n<dyad-guided-build-in-progress>false</dyad-guided-build-in-progress>\n</dyad-gap-analysis>"
       );
+      contentChanged = true;
+    }
 
+    // 2. SELF-HEALING LOGIC: Ghost Lock Cleanup
+    // If no AI streams are running, but the DB says something is in progress, it's a crash leftover.
+    if (
+      activeStreams.size === 0 && 
+      messageContent.includes("<dyad-guided-build-in-progress>true</dyad-guided-build-in-progress>")
+    ) {
+      messageContent = messageContent.replace(
+        /<dyad-guided-build-in-progress>true<\/dyad-guided-build-in-progress>/g,
+        "<dyad-guided-build-in-progress>false</dyad-guided-build-in-progress>"
+      );
+      contentChanged = true;
+      console.log(`[Guided Build] Cleaned up stale locks for App ID: ${appId}`);
+    }
+
+    // 3. Save back to DB only if we injected or healed something
+    if (contentChanged){
       // Persist the injected tags back to the database
       await db
         .update(messages)
@@ -109,6 +129,7 @@ export function registerGuidedBuildHandlers() {
                       ${updatedFinding.description}
                       <dyad-check-build>${updatedFinding.isBuilt ?? false}</dyad-check-build>
                       <dyad-check-completion>${updatedFinding.isVerified ?? false}</dyad-check-completion>
+                      <dyad-guided-build-in-progress>${updatedFinding.isInProgress ?? false}</dyad-guided-build-in-progress>
                       </dyad-gap-analysis>`;
 
       // 4. Replace the old block with the new block in the message content
@@ -140,9 +161,11 @@ function parseGapAnalysisFindings(content: string): GuidedBuildFinding[] {
     // Extract the tracking boolean flags
     const isBuiltMatch = rawDescription.match(/<dyad-check-build>(.*?)<\/dyad-check-build>/);
     const isCompletionMatch = rawDescription.match(/<dyad-check-completion>(.*?)<\/dyad-check-completion>/);
+    const inProgressMatch = rawDescription.match(/<dyad-guided-build-in-progress>(.*?)<\/dyad-guided-build-in-progress>/);
 
     const isBuilt = isBuiltMatch ? isBuiltMatch[1].trim() === "true" : false;
     const isVerified = isCompletionMatch ? isCompletionMatch[1].trim() === "true" : false;
+    const isInProgress = inProgressMatch ? inProgressMatch[1].trim() === "true" : false;
 
     // Clean up the description:
     // 1. Convert <dyad-tasks> tags into a Markdown bold header for better UI rendering
@@ -152,6 +175,7 @@ function parseGapAnalysisFindings(content: string): GuidedBuildFinding[] {
       .replace(/<\/dyad-tasks>/g, "")
       .replace(/<dyad-check-build>.*?<\/dyad-check-build>/g, "")
       .replace(/<dyad-check-completion>.*?<\/dyad-check-completion>/g, "")
+      .replace(/<dyad-guided-build-in-progress>.*?<\/dyad-guided-build-in-progress>/g, "")
       .trim();
 
     findings.push({
@@ -162,8 +186,8 @@ function parseGapAnalysisFindings(content: string): GuidedBuildFinding[] {
       description: cleanDescription,
       isBuilt,
       isVerified,
+      isInProgress,
     } as GuidedBuildFinding);
   }
-
   return findings;
 }

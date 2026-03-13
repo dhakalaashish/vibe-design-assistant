@@ -229,7 +229,7 @@ function GuidedBuildHeader({
                         <Pencil className="w-4 h-4 mr-2" />
                         Edit Design Semantic
                     </Button>
-                    <RunGuidedBuildButton isRunning={isRunning} onRun={onRun} hasFindings={hasFindings}/>
+                    <RunGuidedBuildButton isRunning={isRunning} onRun={onRun} hasFindings={hasFindings} />
                 </div>
             </div>
         </div>
@@ -341,7 +341,7 @@ function NoReviewCard({
                     <p className="text-gray-600 dark:text-gray-400 mb-4">
                         Run Guided Build to find missing features and deviations from your design specs.
                     </p>
-                    <RunGuidedBuildButton isRunning={isRunning} onRun={onRun} hasFindings={false}/>
+                    <RunGuidedBuildButton isRunning={isRunning} onRun={onRun} hasFindings={false} />
                 </div>
             </CardContent>
         </Card>
@@ -391,6 +391,9 @@ function FindingsTable({
     // Local state to track which rows are expanded in-place
     const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
 
+    // GLOBAL LOCK CHECK: Returns true if ANY finding is currently processing
+    const isAnyTaskInProgress = findings.some((f) => f.isInProgress);
+
     const toggleExpand = (key: string, e: React.MouseEvent) => {
         e.stopPropagation();
         setExpandedKeys(prev => {
@@ -419,12 +422,12 @@ function FindingsTable({
                         const displayDescription = (isLongDescription && !isExpanded)
                             ? finding.description.substring(0, DESCRIPTION_PREVIEW_LENGTH) + "..."
                             : finding.description;
-                        
+
                         const isFixing = fixingFindingKey === findingKey;
 
                         return (
                             <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
-                                
+
                                 {/* 1. GAP DETECTED DETAILS COLUMN */}
                                 <td className="px-4 py-4">
                                     <div className="space-y-3">
@@ -461,12 +464,15 @@ function FindingsTable({
                                                 Verified
                                             </Badge>
                                         ) : finding.isBuilt ? (
-                                            <Button 
-                                                onClick={() => onTestCompletion(finding)} 
-                                                size="sm" 
-                                                variant="secondary" 
-                                                // Added pointer, hover animation, and shadow
-                                                className="w-full gap-2 cursor-pointer hover:bg-secondary/80 hover:shadow-sm transition-all active:scale-95"
+                                            <Button
+                                                onClick={() => onTestCompletion(finding)}
+                                                size="sm"
+                                                variant="secondary"
+                                                disabled={isAnyTaskInProgress}
+                                                className={`w-full gap-2 transition-all ${isAnyTaskInProgress
+                                                        ? "cursor-not-allowed opacity-50"
+                                                        : "cursor-pointer hover:bg-secondary/80 hover:shadow-sm active:scale-95"
+                                                    }`}
                                             >
                                                 <Check className="w-4 h-4" />
                                                 Check Completion
@@ -477,9 +483,11 @@ function FindingsTable({
                                                     onClick={() => onFix(finding)}
                                                     size="sm"
                                                     variant="default"
-                                                    // Added pointer
-                                                    className="w-full gap-2 cursor-pointer"
-                                                    disabled={isFixing}
+                                                    disabled={isAnyTaskInProgress || isFixing}
+                                                    className={`w-full gap-2 ${isAnyTaskInProgress || isFixing
+                                                            ? "cursor-not-allowed opacity-50"
+                                                            : "cursor-pointer"
+                                                        }`}
                                                 >
                                                     {isFixing ? (
                                                         <>
@@ -493,10 +501,24 @@ function FindingsTable({
                                                         "Build This"
                                                     )}
                                                 </Button>
-                                                <Button onClick={() => onEditManually(finding)} size="sm" variant="outline" className="w-full cursor-pointer">
+                                                <Button
+                                                    onClick={() => onEditManually(finding)}
+                                                    size="sm"
+                                                    variant="outline"
+                                                    disabled={isAnyTaskInProgress}
+                                                    className={`w-full ${isAnyTaskInProgress ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+                                                        }`}
+                                                >
                                                     Edit Manually
                                                 </Button>
-                                                <Button onClick={() => onDiscussPrompt(finding)} size="sm" variant="outline" className="w-full cursor-pointer">
+                                                <Button
+                                                    onClick={() => onDiscussPrompt(finding)}
+                                                    size="sm"
+                                                    variant="outline"
+                                                    disabled={isAnyTaskInProgress}
+                                                    className={`w-full ${isAnyTaskInProgress ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+                                                        }`}
+                                                >
                                                     Discuss Prompt
                                                 </Button>
                                             </>
@@ -554,7 +576,7 @@ function EditFindingDialog({
                 <div className="flex flex-col gap-4 py-4 overflow-y-auto">
                     <div className="space-y-2">
                         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Title</label>
-                        <input 
+                        <input
                             className="w-full rounded-md border border-gray-300 dark:border-gray-700 bg-transparent p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
@@ -562,7 +584,7 @@ function EditFindingDialog({
                     </div>
                     <div className="space-y-2 flex-grow">
                         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Description / Prompt</label>
-                        <textarea 
+                        <textarea
                             className="w-full h-64 rounded-md border border-gray-300 dark:border-gray-700 bg-transparent p-3 font-mono text-sm outline-none focus:ring-2 focus:ring-blue-500"
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
@@ -597,7 +619,6 @@ export const GuidedBuildPanel = () => {
     const [fixingFindingKey, setFixingFindingKey] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [completedFindings, setCompletedFindings] = useState<Set<string>>(new Set());
-
     const [editModalOpen, setEditModalOpen] = useState(false);
     const [editingFinding, setEditingFinding] = useState<GuidedBuildFinding | null>(null);
     const [editedFindings, setEditedFindings] = useState<Record<string, GuidedBuildFinding>>({});
@@ -615,7 +636,7 @@ export const GuidedBuildPanel = () => {
 
     const handleSaveFindingEdit = async (updatedFinding: GuidedBuildFinding) => {
         if (!selectedAppId || !editingFinding) return;
-        
+
         try {
             // Keep UI responsive by optimistically updating local state first
             const originalKey = createFindingKey(editingFinding);
@@ -641,6 +662,8 @@ export const GuidedBuildPanel = () => {
     const handleDiscussPrompt = async (finding: GuidedBuildFinding) => {
         if (!selectedAppId) return;
         try {
+            // No need to lock or unlock here, only when the edit is done then we can automatically build this prompt
+            // Todo: rename the chat to # Discuss Tasklist Prompt, such that when it is done here, then the VDA knows how to update
             const chatId = await IpcClient.getInstance().createChat(selectedAppId);
             setSelectedChatId(chatId);
             await navigate({ to: "/chat", search: { id: chatId } });
@@ -661,6 +684,10 @@ export const GuidedBuildPanel = () => {
     const handleTestCompletion = async (finding: GuidedBuildFinding) => {
         if (!selectedAppId) return;
         try {
+            // 1. Lock
+            await IpcClient.getInstance().updateGuidedBuildFinding(selectedAppId, finding.title, { ...finding, isInProgress: true });
+            await refetch();
+
             const chatId = await IpcClient.getInstance().createChat(selectedAppId);
             setSelectedChatId(chatId);
             await navigate({ to: "/chat", search: { id: chatId } });
@@ -678,13 +705,15 @@ export const GuidedBuildPanel = () => {
                     await IpcClient.getInstance().updateGuidedBuildFinding(
                         selectedAppId,
                         finding.title,
-                        { ...finding, isVerified: true }
+                        { ...finding, isVerified: true, isInProgress: false }
                     );
-                    refetch(); 
+                    refetch();
                 },
             });
         } catch (err) {
             showError(`Failed to create test chat: ${err}`);
+            await IpcClient.getInstance().updateGuidedBuildFinding(selectedAppId, finding.title, { ...finding, isInProgress: false });
+            refetch();
         }
     };
 
@@ -788,8 +817,9 @@ export const GuidedBuildPanel = () => {
         }
 
         try {
-            const key = createFindingKey(finding);
-            setFixingFindingKey(key);
+            // 1. Lock the finding in the database
+            await IpcClient.getInstance().updateGuidedBuildFinding(selectedAppId, finding.title, { ...finding, isInProgress: true });
+            await refetch();
 
             const chatId = await IpcClient.getInstance().createChat(selectedAppId);
 
@@ -801,17 +831,16 @@ export const GuidedBuildPanel = () => {
             // or construct a generic prompt if not explicit.
             const prompt = `I am ready to implement this feature gap identified in the Guided Build analysis:
 
-**${finding.title}** (${finding.level})
+                            **${finding.title}** (${finding.level})
 
-${finding.description}
+                            ${finding.description}
 
-Please implement the tasks defined above.`;
+                            Please implement the tasks defined above.`;
 
             await streamMessage({
                 prompt,
                 chatId,
                 onSettled: async () => {
-                    setFixingFindingKey(null);
                     // Mark this specific finding as completed
                     // setCompletedFindings((prev) => {
                     //     const newSet = new Set(prev);
@@ -822,14 +851,16 @@ Please implement the tasks defined above.`;
                     await IpcClient.getInstance().updateGuidedBuildFinding(
                         selectedAppId,
                         finding.title,
-                        { ...finding, isBuilt: true }
+                        { ...finding, isBuilt: true, isInProgress: false }
                     );
                     refetch(); // Pull the fresh DB state so the UI swaps the buttons
                 },
             });
         } catch (err) {
             showError(`Failed to create build chat: ${err}`);
-            setFixingFindingKey(null);
+            // Fallback unlock if it crashes before stream starts
+            await IpcClient.getInstance().updateGuidedBuildFinding(selectedAppId, finding.title, { ...finding, isInProgress: false });
+            refetch();
         }
     };
 

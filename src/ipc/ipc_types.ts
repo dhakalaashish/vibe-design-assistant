@@ -27,6 +27,7 @@ export interface GuidedBuildFinding {
   description: string;
   isBuilt?: boolean;
   isVerified?: boolean;
+  isInProgress?: boolean;
 }
 
 export interface GuidedBuildReviewResult {

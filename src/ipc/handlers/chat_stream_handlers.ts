@@ -100,7 +100,7 @@ type AsyncIterableStream<T> = AsyncIterable<T> & ReadableStream<T>;
 const logger = log.scope("chat_stream_handlers");
 
 // Track active streams for cancellation
-const activeStreams = new Map<number, AbortController>();
+export const activeStreams = new Map<number, AbortController>();
 
 // Track partial responses for cancelled streams
 const partialResponses = new Map<number, string>();
