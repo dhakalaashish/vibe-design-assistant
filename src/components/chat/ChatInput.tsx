@@ -31,7 +31,7 @@ import {
 } from "@/atoms/chatAtoms";
 import { atom, useAtom, useSetAtom, useAtomValue } from "jotai";
 import { useStreamChat } from "@/hooks/useStreamChat";
-import { selectedAppIdAtom } from "@/atoms/appAtoms";
+import { selectedAppIdAtom, previewModeAtom } from "@/atoms/appAtoms";
 import { Button } from "@/components/ui/button";
 import { useProposal } from "@/hooks/useProposal";
 import {
@@ -77,6 +77,9 @@ import { LexicalChatInput } from "./LexicalChatInput";
 import { useChatModeToggle } from "@/hooks/useChatModeToggle";
 
 const showTokenBarAtom = atom(false);
+
+export const GUIDED_BUILD_TASK_TITLE_PREFIX = "# Guided Build Task: ";
+export const GUIDED_VERIFICATION_TITLE_PREFIX = "# Guided Verification: ";
 
 export function ChatInput({ chatId }: { chatId?: number }) {
   const posthog = usePostHog();
@@ -317,6 +320,7 @@ export function ChatInput({ chatId }: { chatId?: number }) {
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
+          {chatId && <ActiveTaskBanner chatId={chatId} />}
           {/* Only render ChatInputActions if proposal is loaded */}
           {proposal &&
             proposalResult?.chatId === chatId &&
@@ -715,6 +719,144 @@ function DoneButton() {
   );
 }
 
+function DoneBuildingButton({ findingTitle }: { findingTitle: string }) {
+  const appId = useAtomValue(selectedAppIdAtom);
+  const setPreviewMode = useSetAtom(previewModeAtom);
+  const setIsPreviewOpen = useSetAtom(isPreviewOpenAtom);
+
+  const onClick = async () => {
+    if (!appId) return;
+    try {
+      const ipcClient = IpcClient.getInstance();
+      
+      // 1. Fetch the full existing finding using the IpcClient
+      const data = await ipcClient.getLatestGuidedBuild(appId);
+      const finding = data.findings.find((f: any) => f.title === findingTitle);
+      
+      if (finding) {
+        // 2. Update the DB flags using the IpcClient
+        await ipcClient.updateGuidedBuildFinding(appId, findingTitle, {
+          ...finding,
+          isBuilt: true,
+          isInProgress: false
+        });
+      }
+
+      // 3. Open the Guided Build panel
+      setPreviewMode("guided-build");
+      setIsPreviewOpen(true);
+
+    } catch (error) {
+      console.error("Error completing build task:", error);
+    }
+  };
+
+  return (
+    <SuggestionButton onClick={onClick} tooltipText="Mark this task as built and return to Guided Build">
+      <Check size={16} className="mr-2" />
+      Done Building
+    </SuggestionButton>
+  );
+}
+
+function ConcludeVerificationButton({ findingTitle }: { findingTitle: string }) {
+  const appId = useAtomValue(selectedAppIdAtom);
+  const chatId = useAtomValue(selectedChatIdAtom);
+  const messagesById = useAtomValue(chatMessagesByIdAtom);
+  const setPreviewMode = useSetAtom(previewModeAtom);
+  const setIsPreviewOpen = useSetAtom(isPreviewOpenAtom);
+
+  const onClick = async () => {
+    if (!appId || !chatId) return;
+    try {
+      const ipcClient = IpcClient.getInstance();
+      
+      // 1. Fetch existing finding using the IpcClient
+      const data = await ipcClient.getLatestGuidedBuild(appId);
+      const finding = data.findings.find((f: any) => f.title === findingTitle);
+      
+      if (finding) {
+          // 2. Parse AI verification from chat history
+          const messages = messagesById.get(chatId) || [];
+          const fullAssistantText = messages.filter(m => m.role === "assistant").map(m => m.content).join("\n");
+          
+          const isVerified = fullAssistantText.includes("<dyad-verify-build>true</dyad-verify-build>");
+          // If not verified, then it will create a new prompt, and this ensures that isBuilt is false, and isVerified is also false
+          let updatedFinding = { ...finding, isVerified, isBuilt: isVerified, isInProgress: false };
+          
+          // 3. If failed, extract the new gap analysis the AI generated
+          if (!isVerified) {
+              const regex = /<dyad-re-gap-analysis\s+title="([^"]+)"\s+status="(missing|partial|violation)">([\s\S]*?)<\/dyad-re-gap-analysis>/i;
+              const match = fullAssistantText.match(regex);
+              if (match) {
+                  updatedFinding.title = match[1].trim();
+                  updatedFinding.level = match[2] as any;
+                  updatedFinding.description = match[3].replace(/<dyad-tasks>/g, "\n\n**Actionable Tasks:**\n").replace(/<\/dyad-tasks>/g, "").trim();
+              }
+              console.log("Task failed verification. New tasks have been added.");
+          } else {
+              console.log("Task Verified Successfully!");
+          }
+
+          // 4. Save to DB using the IpcClient
+          await ipcClient.updateGuidedBuildFinding(appId, findingTitle, updatedFinding);
+      }
+
+      // 5. Open Guided Build panel
+      setPreviewMode("guided-build");
+      setIsPreviewOpen(true);
+
+    } catch (error) {
+      console.error("Error evaluating verification:", error);
+    }
+  };
+
+  return (
+    <SuggestionButton onClick={onClick} tooltipText="Evaluate AI verification and return to Guided Build">
+      <Check size={16} className="mr-2" />
+      Conclude Verification
+    </SuggestionButton>
+  );
+}
+
+function CancelGuidedBuildButton({ findingTitle }: { findingTitle: string }) {
+  const appId = useAtomValue(selectedAppIdAtom);
+  const setPreviewMode = useSetAtom(previewModeAtom);
+  const setIsPreviewOpen = useSetAtom(isPreviewOpenAtom);
+
+  const onClick = async () => {
+    if (!appId) return;
+    try {
+      const ipcClient = IpcClient.getInstance();
+      
+      // 1. Fetch using the IpcClient
+      const data = await ipcClient.getLatestGuidedBuild(appId);
+      const finding = data.findings.find((f: any) => f.title === findingTitle);
+      
+      if (finding) {
+        // 2. Unlock using the IpcClient
+        await ipcClient.updateGuidedBuildFinding(appId, findingTitle, {
+          ...finding,
+          isInProgress: false
+        });
+      }
+
+      // 3. Open Guided Build panel
+      setPreviewMode("guided-build");
+      setIsPreviewOpen(true);
+    } catch (error) {
+      console.error("Error canceling task:", error);
+    }
+  };
+
+  return (
+    <SuggestionButton onClick={onClick} tooltipText="Cancel this process and unlock the task">
+      <X size={16} className="mr-2" />
+      Cancel
+    </SuggestionButton>
+  );
+}
+
 export function mapActionToButton(action: SuggestedAction) {
   switch (action.id) {
     case "summarize-in-new-chat":
@@ -741,26 +883,96 @@ export function mapActionToButton(action: SuggestedAction) {
   }
 }
 
-function ActionProposalActions({ proposal }: { proposal: ActionProposal }) {
-  // Use atoms to get the current chat title
-  const chats = useAtomValue(chatsAtom);
-  const selectedChatId = useAtomValue(selectedChatIdAtom);
+// function ActionProposalActions({ proposal }: { proposal: ActionProposal }) {
+//   // Use atoms to get the current chat title
+//   const chats = useAtomValue(chatsAtom);
+//   const selectedChatId = useAtomValue(selectedChatIdAtom);
   
-  const currentChat = chats.find((c) => c.id === selectedChatId);
-  const title = currentChat?.title || "";
+//   const currentChat = chats.find((c) => c.id === selectedChatId);
+//   const title = currentChat?.title || "";
 
-  // Check if title starts with the specific prefixes
-  const showDoneButton = 
-    title.startsWith(DESIGN_BUILD_TITLE_PREFIX) || 
-    title.startsWith(PROMPT_IMPROVEMENT_TITLE_PREFIX);
+//   // Check if title starts with the specific prefixes
+//   const showDoneButton = 
+//     title.startsWith(DESIGN_BUILD_TITLE_PREFIX) || 
+//     title.startsWith(PROMPT_IMPROVEMENT_TITLE_PREFIX);
 
+//   // Check new Guided Build prefixes
+//   const isGuidedBuildMode = title.startsWith(GUIDED_BUILD_TASK_TITLE_PREFIX);
+//   const isVerificationMode = title.startsWith(GUIDED_VERIFICATION_TITLE_PREFIX);
+  
+//   // Extract the original finding title
+//   let findingTitle = "";
+//   if (isGuidedBuildMode) {
+//       findingTitle = title.replace(GUIDED_BUILD_TASK_TITLE_PREFIX, "");
+//   } else if (isVerificationMode) {
+//       findingTitle = title.replace(GUIDED_VERIFICATION_TITLE_PREFIX, "");
+//   }
+
+//   return (
+//     <div className="border-b border-border p-2 pb-0 flex items-center justify-between">
+//       <div className="flex items-center space-x-2 overflow-x-auto pb-2">
+//         {proposal.actions.map((action) => mapActionToButton(action))}
+
+//         {/* Conditionally render DoneButton based on title */}
+//         {showDoneButton && <DoneButton />}
+
+//         {/* Guided Build Cancel Button (shows in both modes) */}
+//         {(isGuidedBuildMode || isVerificationMode) && (
+//             <CancelGuidedBuildButton findingTitle={findingTitle} />
+//         )}
+        
+//         {/* Specific Action Buttons */}
+//         {isGuidedBuildMode && <DoneBuildingButton findingTitle={findingTitle} />}
+//         {isVerificationMode && <ConcludeVerificationButton findingTitle={findingTitle} />}
+
+//       </div>
+//     </div>
+//   );
+// }
+
+function ActionProposalActions({ proposal }: { proposal: ActionProposal }) {
   return (
     <div className="border-b border-border p-2 pb-0 flex items-center justify-between">
       <div className="flex items-center space-x-2 overflow-x-auto pb-2">
         {proposal.actions.map((action) => mapActionToButton(action))}
+      </div>
+    </div>
+  );
+}
 
-        {/* Conditionally render DoneButton based on title */}
-        {showDoneButton && <DoneButton />}
+function ActiveTaskBanner({ chatId }: { chatId: number }) {
+  const chats = useAtomValue(chatsAtom);
+  const currentChat = chats.find((c) => c.id === chatId);
+  const title = currentChat?.title || "";
+
+  const isGuidedBuildMode = title.startsWith(GUIDED_BUILD_TASK_TITLE_PREFIX);
+  const isVerificationMode = title.startsWith(GUIDED_VERIFICATION_TITLE_PREFIX);
+  const showOriginalDoneButton = title.startsWith(DESIGN_BUILD_TITLE_PREFIX) || title.startsWith(PROMPT_IMPROVEMENT_TITLE_PREFIX);
+
+  // If this is just a normal chat, render nothing.
+  if (!isGuidedBuildMode && !isVerificationMode && !showOriginalDoneButton) {
+    return null;
+  }
+
+  let findingTitle = "";
+  if (isGuidedBuildMode) {
+    findingTitle = title.replace(GUIDED_BUILD_TASK_TITLE_PREFIX, "");
+  } else if (isVerificationMode) {
+    findingTitle = title.replace(GUIDED_VERIFICATION_TITLE_PREFIX, "");
+  }
+
+  return (
+    <div className="border-b border-border bg-blue-50/50 dark:bg-blue-900/20 p-2.5 flex items-center justify-between rounded-t-lg">
+      <div className="text-sm font-semibold text-blue-800 dark:text-blue-300 ml-1">
+        {isGuidedBuildMode && `Building: ${findingTitle}`}
+        {isVerificationMode && `Verifying: ${findingTitle}`}
+        {showOriginalDoneButton && `Interactive Design Session`}
+      </div>
+      <div className="flex items-center space-x-2">
+        {showOriginalDoneButton && <DoneButton />}
+        {isGuidedBuildMode && <DoneBuildingButton findingTitle={findingTitle} />}
+        {isVerificationMode && <ConcludeVerificationButton findingTitle={findingTitle} />}
+        {(isGuidedBuildMode || isVerificationMode) && <CancelGuidedBuildButton findingTitle={findingTitle} />}
       </div>
     </div>
   );

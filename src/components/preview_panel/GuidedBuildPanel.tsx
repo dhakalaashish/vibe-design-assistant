@@ -35,6 +35,10 @@ import { useState, useEffect } from "react";
 import { VanillaMarkdownParser } from "@/components/chat/DyadMarkdownParser";
 import { useLoadAppFile } from "@/hooks/useLoadAppFile";
 import { useQueryClient } from "@tanstack/react-query";
+import { 
+    GUIDED_BUILD_TASK_TITLE_PREFIX, 
+    GUIDED_VERIFICATION_TITLE_PREFIX 
+} from "@/components/chat/ChatInput";
 import { improvePromptInNewChat } from "@/components/chat/DesignInNewChat";
 
 // --- ADAPTED TYPES & HELPERS FOR GUIDED BUILD ---
@@ -609,6 +613,12 @@ export const GuidedBuildPanel = () => {
     const queryClient = useQueryClient();
     const { streamMessage } = useStreamChat({ hasChatId: false });
     const { data, isLoading, error, refetch } = useGuidedBuild(selectedAppId);
+
+    // Force a fresh DB pull every time this tab is opened!
+    useEffect(() => {
+        refetch();
+    }, [refetch]);
+
     const [isRunningReview, setIsRunningReview] = useState(false);
     const [detailsOpen, setDetailsOpen] = useState(false);
     const [detailsFinding, setDetailsFinding] = useState<GuidedBuildFinding | null>(
@@ -689,6 +699,13 @@ export const GuidedBuildPanel = () => {
             await refetch();
 
             const chatId = await IpcClient.getInstance().createChat(selectedAppId);
+
+            // 2. Set verification title prefix
+            await IpcClient.getInstance().updateChat({
+                chatId,
+                title: `${GUIDED_VERIFICATION_TITLE_PREFIX}${finding.title}`
+            });
+
             setSelectedChatId(chatId);
             await navigate({ to: "/chat", search: { id: chatId } });
 
@@ -700,15 +717,15 @@ export const GuidedBuildPanel = () => {
             await streamMessage({
                 prompt,
                 chatId,
-                onSettled: async () => {
-                    // Flip the isVerified flag to true in the DB
-                    await IpcClient.getInstance().updateGuidedBuildFinding(
-                        selectedAppId,
-                        finding.title,
-                        { ...finding, isVerified: true, isInProgress: false }
-                    );
-                    refetch();
-                },
+                // onSettled: async () => {
+                //     // Flip the isVerified flag to true in the DB
+                //     await IpcClient.getInstance().updateGuidedBuildFinding(
+                //         selectedAppId,
+                //         finding.title,
+                //         { ...finding, isVerified: true, isInProgress: false }
+                //     );
+                //     refetch();
+                // },
             });
         } catch (err) {
             showError(`Failed to create test chat: ${err}`);
@@ -823,6 +840,12 @@ export const GuidedBuildPanel = () => {
 
             const chatId = await IpcClient.getInstance().createChat(selectedAppId);
 
+            // 2. Set the strict title prefix so the Chat UI knows what mode it is in
+            await IpcClient.getInstance().updateChat({
+                chatId,
+                title: `${GUIDED_BUILD_TASK_TITLE_PREFIX}${finding.title}`
+            });
+
             // Navigate to the new chat
             setSelectedChatId(chatId);
             await navigate({ to: "/chat", search: { id: chatId } });
@@ -840,21 +863,21 @@ export const GuidedBuildPanel = () => {
             await streamMessage({
                 prompt,
                 chatId,
-                onSettled: async () => {
-                    // Mark this specific finding as completed
-                    // setCompletedFindings((prev) => {
-                    //     const newSet = new Set(prev);
-                    //     newSet.add(key);
-                    //     return newSet;
-                    // });
-                    // Flip the isBuilt flag to true in the DB
-                    await IpcClient.getInstance().updateGuidedBuildFinding(
-                        selectedAppId,
-                        finding.title,
-                        { ...finding, isBuilt: true, isInProgress: false }
-                    );
-                    refetch(); // Pull the fresh DB state so the UI swaps the buttons
-                },
+                // onSettled: async () => {
+                //     // Mark this specific finding as completed
+                //     // setCompletedFindings((prev) => {
+                //     //     const newSet = new Set(prev);
+                //     //     newSet.add(key);
+                //     //     return newSet;
+                //     // });
+                //     // Flip the isBuilt flag to true in the DB
+                //     await IpcClient.getInstance().updateGuidedBuildFinding(
+                //         selectedAppId,
+                //         finding.title,
+                //         { ...finding, isBuilt: true, isInProgress: false }
+                //     );
+                //     refetch(); // Pull the fresh DB state so the UI swaps the buttons
+                // },
             });
         } catch (err) {
             showError(`Failed to create build chat: ${err}`);
