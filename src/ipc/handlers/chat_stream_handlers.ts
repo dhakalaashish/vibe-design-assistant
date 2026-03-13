@@ -15,6 +15,7 @@ import {
   DESIGN_SEMANTIC_INFER_PROMPT,
   DESIGN_SEMANTIC_INTERACTIVE_BUILD_PROMPT,
   design_improvement_prompt,
+  guided_verification_prompt,
   gap_analysis_with_design_semantic_prompt,
 } from "../../prompts/design_prompt";
 import { db } from "../../db";
@@ -94,6 +95,10 @@ import {
   VersionedFiles as VersionedFiles,
 } from "../utils/versioned_codebase_context";
 import { DESIGN_BUILD_TITLE_PREFIX, INFER_DESIGN_SEMANTIC_USER_MESSAGE, PROMPT_IMPROVEMENT_TITLE_PREFIX } from "@/components/chat/DesignInNewChat";
+import { 
+    GUIDED_BUILD_TASK_TITLE_PREFIX, 
+    GUIDED_VERIFICATION_TITLE_PREFIX 
+} from "@/components/chat/ChatInput";
 
 type AsyncIterableStream<T> = AsyncIterable<T> & ReadableStream<T>;
 
@@ -722,6 +727,14 @@ ${componentSnippet}
           systemPrompt = design_improvement_prompt(
             designSemanticFileContent,
           ).replace("[[PROMPT_TO_BE_IMPROVED]]", initialPrompt);
+          isCodebaseNeeded = true;
+        }
+
+        const guidedVerificationIntent = chatTitle.startsWith(GUIDED_VERIFICATION_TITLE_PREFIX)
+        if (guidedVerificationIntent){
+          systemPrompt = guided_verification_prompt(
+            designSemanticFileContent,
+          );
           isCodebaseNeeded = true;
         }
 

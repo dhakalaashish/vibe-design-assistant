@@ -1123,12 +1123,84 @@ Refactor \`src/api/tasks.ts\` to enforce the Active Task Limit invariant. Before
 Begin your Gap Analysis.
 `;
 
+export const VERIFY_BUILD_PROMPT = `
+# Role
+You are a strict QA Engineer and Technical Lead. Your goal is to review the current codebase to verify if a specific "Feature Gap" has been successfully and completely built according to the Design Semantics.
+
+# Context
+- **Design Semantic**: The provided DESIGN_SEMANTIC.md file.
+- **The Codebase**: The actual implemented code.
+- **The Task**: The user will provide the title and description of the gap they attempted to fix.
+
+# Rules
+1. **Review the Code**: Look for the specific components, logic, and invariants required by the task. 
+2. **Be Strict**: If a button exists but doesn't work, it is "partial". If an invariant is ignored, it is a "violation". 
+
+# Design Semantics
+[[DESIGN_SEMANTICS]]
+
+# Design Heuristics
+Use these heuristics for writing a design-friendly prompt if you need to write a new prompt:
+[[DESIGN_HEURISTICS]]
+
+# Output Format Structure (ONLY OUTPUT THIS AT THE END)
+
+## Scenario A: The Feature is 100% Complete and Correct
+If the codebase perfectly matches the requirements for this specific task, output a short message saying that the feature is 100% implemented already, and exactly this:
+
+<dyad-verify-build>true</dyad-verify-build>
+
+## Scenario B: The Feature is Incomplete or Incorrect
+If there are missing elements, bugs, or violations, give a very short message of what you are doing, and output a NEW gap analysis focusing ONLY on what is left to do. 
+
+<dyad-verify-build>false</dyad-verify-build>
+
+<dyad-re-gap-analysis title="[Updated Title reflecting what is left]" status="partial|violation">
+
+**The Spec**: [Quote the requirement that is still failing]
+
+**The Reality**: [Describe what the code currently does wrong]
+
+**Impact**: [Why this still needs to be fixed]
+
+
+<dyad-tasks>
+
+[Write new, highly specific prompt-ready instructions to fix the remaining issues.]
+
+</dyad-tasks>
+
+
+</dyad-re-gap-analysis>
+
+
+At the end, ask the user to click on "Conclude Verification" Button if the verification has been concluded, 
+or "Cancel" Button if they want to stop the testing.
+
+`;
+
 export function gap_analysis_with_design_semantic_prompt(
     design_semantic_file_content: string
 ): string {
     return GAP_ANALYSIS_DESIGN_SEMANTIC
         .replace('[[DESIGN_HEURISTICS]]', default_design_heuristics.trim())
         .replace('[[DESIGN_SEMANTICS]]', design_semantic_file_content.trim())
+}
+
+export function guided_verification_prompt(
+    design_semantic_file_content: string
+): string {
+    let selectedPrompt: string;
+
+    const DESIGN_SEMANTIC_FILE_CONTENT = `
+    This is the current DESIGN_SEMANTIC.md for the user's app:
+    
+    ${design_semantic_file_content}
+    
+    `
+
+    // Replace the placeholder with the actual design heuristics content
+    return VERIFY_BUILD_PROMPT.replace('[[DESIGN_HEURISTICS]]', default_design_heuristics.trim()).replace('[[DESIGN_SEMANTICS]]', DESIGN_SEMANTIC_FILE_CONTENT.trim());
 }
 
 export function design_improvement_prompt(
@@ -1140,13 +1212,10 @@ export function design_improvement_prompt(
     This is the current DESIGN_SEMANTIC.md for the user's app:
     
     ${design_semantic_file_content}
+
     `
-
-    // Logic to determine which prompt template to use
-    selectedPrompt = IMPROVE_PROMPT_INTERACTIVE_SESSION;
-
     // Replace the placeholder with the actual design heuristics content
-    return selectedPrompt.replace('[[DESIGN_HEURISTICS]]', default_design_heuristics.trim()).replace('[[DESIGN_SEMANTICS]]', DESIGN_SEMANTIC_FILE_CONTENT.trim());
+    return IMPROVE_PROMPT_INTERACTIVE_SESSION.replace('[[DESIGN_HEURISTICS]]', default_design_heuristics.trim()).replace('[[DESIGN_SEMANTICS]]', DESIGN_SEMANTIC_FILE_CONTENT.trim());
 }
 
 export const DESIGN_SEMANTIC_INTERACTIVE_BUILD_PROMPT = DESIGN_SEMANTIC_INTERACTIVE_BUILD.replace('[[DESIGN_HEURISTICS]]', default_design_heuristics.trim())

@@ -72,6 +72,7 @@ import type {
   SelectNodeFolderResult,
   SecurityFinding,
   GuidedBuildFinding,
+  GuidedBuildReviewResult,
 } from "./ipc_types";
 import type { Template } from "../shared/templates";
 import type {
@@ -1221,7 +1222,7 @@ export class IpcClient {
 
   public async getLatestGuidedBuild(
     appId: number,
-  ): Promise<SecurityReviewResult> {
+  ): Promise<GuidedBuildReviewResult> {
     return this.ipcRenderer.invoke("get-latest-guided-build", appId);
   }
 

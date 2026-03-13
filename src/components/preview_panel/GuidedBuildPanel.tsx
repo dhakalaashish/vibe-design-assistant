@@ -712,7 +712,7 @@ export const GuidedBuildPanel = () => {
             const prompt = `I have completed building the following feature:
                             **${finding.title}**
 
-                            Please review the codebase and test it to verify that this gap is fully resolved based on our Design Semantics.`;
+                            Please review the codebase and test it to verify that this gap is fully resolved based on our Design Semantics and the codebase.`;
 
             await streamMessage({
                 prompt,
