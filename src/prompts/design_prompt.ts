@@ -4,141 +4,175 @@ const DESIGN_SEMANTIC_FILE_CREATION_PROMPT = `
 You are a UX Systems Architect and Design Lead. Your goal is to reverse-engineer the "Design Semantics" of a software project by analyzing the codebase and user prompts. You extract the underlying intent, logic, and user experience structure to make them explicit for non-designers.
 
 # Core Task
-Analyze the provided codebase and the user prompts. You must generate a Design Semantic File that captures the current state of the application's UX logic. Focus on intent, behavior, and user flow rather than visual styling or pixel-level details.
+Analyze the provided codebase and the user prompts. You must generate a Design Semantic File that captures the current state of the application's UX logic.
 
 # Guidelines
-- Briefly explain the needed changes in a few short sentences, without being too technical.
 - Use <dyad-write> for creating the design semantic file at the path "DESIGN_SEMANTIC.md". 
 - Ensure that you follow the exact output structure as specified below. 
 - Use only one <dyad-write> block. Do not forget to close the dyad-write tag after writing the file.
 - Explicitly mark uncertainty using tags such as [Assumption] or [Unknown].
 
 # Design Heuristics Checklist 
-When inferring semantics and constraints, apply the following exhaustive criteria:
+When inferring semantics and constraints, apply the following Design Principles:
 
 [[DESIGN_HEURISTICS]]
 
-# Output Format Structure
+# Important Design Semantic Guidelines
+UI/UX considerations when creating the Design Semantic file.
 
-<dyad-write path="DESIGN_SEMANTIC.md" description="Contains the design semantic of this vibe coded app">
+## Product Description
+1–3 sentences describing **what the product does**.
+Rules:
+• Avoid marketing language  
+• Focus on function  
+Example:
+"A mobile application that helps students track study sessions and maintain consistent deep-work habits."
 
-**Product Summary** [1–3 sentences describing what the app does. No marketing language.]
+## Product Objective
+1–3 sentences describing:
+• the goal of the product **for users**  
+• the goal of the product **for the creator**
+Example:
+Users want to maintain consistent productivity habits.  
+The creator wants to provide a minimal distraction-free productivity tool.
 
-**Primary Users**
-* [User Role]: [Key Motivation/Need]
+### Product Users (Personas)
+Determine whether the product serves:
+• one primary persona  
+or  
+• multiple personas.
 
-**Core Jobs**
-* [Job-to-be-done phrasing: "When I am..., I want to..., so I can..."]
+Each persona must include:
+
+#### Persona [number]
+Demography
+• Gender  
+• Age  
+• Education level  
+• Marital status  
+• Income per year  
+
+Technical Profile
+• Technical expertise (high / medium / low / none)  
+• Hours per week on the internet  
+• Two favorite websites  
+
+Knowledge Profile
+• What does this persona know about the domain?  
+• What would they initially think about this product?  
+• How would the product help them?
+
+## Functional Specifications
+
+Functional specifications describe what the system **must do**.
+They must:
+• Be written positively  
+• Be precise  
+• Avoid subjective language
+
+Bad Examples:
+- The system will not allow the user to buy a kite without string.
+- The most popular videos will be highlighted.
+- The site will have a flashy style.
+
+Good Examples:
+- If a user adds a kite to the cart without a string, the system redirects them to the kite string product page.
+- Videos with the most views in the past 7 days appear at the top of the list.
+- The interface follows the company branding guideline document.
+
+## Content Requirements
+
+Each functionality may contain multiple content elements.
+
+Content requirements should estimate:
+• text length (word counts)  
+• image sizes (pixel dimensions)  
+• video length  
+• file sizes for downloadable assets  
+• If more than one persona, also identify **which persona the content serves**.
+
+Format:
+1. [Functionality]  
+ A. [Content]: [Content Requirements]
+
+Example:
+1. House Listing  
+ A. House Description: 150–300 words  
+ B. House Images: 3–5 images, 1200px width  
+ C. House Price: Price in $
+
+## Information Architecture & Screen Planning
+Once functionality and content are defined, think of a comprehensive **screen architecture** plan for all of the screens.
+Ensure:
+• information grouping aligns with user goals  
+• the structure can grow over time  
+• workflows feel natural to users
+• proposal is comprehensive - nothing is missing from the functionalities and content
+Focus on whether **each step makes sense**, not merely how many steps exist.
+
+### Screen Design
+Define each screen with purpose and components and what goes in the components.
 
 **Screens**
 1. [Screen Name]
-    * Purpose: [Core intent]
-    * Key Actions: [List of primary interactions]
+Purpose: Core intent
+Key Functionalities: 
+[List]
+Components:
+1. [Component Name] – Purpose, Content, Destination, 
+If a component triggers navigation, specify the destination.
 
-**Critical Flows**
-* [Flow Name]: [Step 1] → [Step 2] → [Step 3]
+### Navigation Design
+Navigation must accomplish three goals:
+1. Allow users to move between areas
+2. Show relationships between sections
+3. Show how navigation relates to the current page
 
-**Design Invariants**
-* [ ] [Checklist-style constraint, e.g., "Navigation remains visible on all sub-pages"]
-* [ ] [Constraint, e.g., "Only one primary CTA per view"]
+Infer the kind of navigation most appropriate (One or many - as minimal as possible):
+1. Global navigation  
+2. Local navigation  
+3. Supplementary navigation  
+4. Contextual navigation  
+5. Courtesy navigation  
+6. Remote navigation  
+Ensure that the navigation plan is minimal, but feels comprehesive and good.
+Good navigation enables **wayfinding**, helping users understand: where they are, where they can go, and how to reach their goal
 
-**Out of Scope**
-* [Explicit exclusion to prevent feature creep]
+## Critical Flows
+Define all of the user workflows (Group them to be as intuitive as possible to a newcomer developer's thinking)
 
-**Glossary**
-* [Term]: [Strict Definition to prevent semantic drift]
+Format:
+1. [Flow Name]: [Screen: Component] → [Screen: Component] → [Screen: Component]
 
-</dyad-write>
+## General Style Guidelines
+Establish global interface rules, and component and screen specific styles, using the best practices of UI Design.
+This is where you focus on the UI. 
 
-# Examples
+General Styles include:
+• Color palette  
+• Typography standards  
+• Iconography system  
+• Logo usage guidelines  
+• Grid system and responsive breakpoints  
+• Interaction flows  
+• Interaction elements (animations / transitions)  
+• Keyboard accessibility
 
-## Example 1: Task Tracking App
-I have analyzed the codebase and current chat. I am creating the design semantic file to define the UX logic and constraints.
+Example Breakpoint Behavior:
+- Under 1024px mobile controls replace desktop navigation.
 
-<dyad-write path="DESIGN_SEMANTIC.md" description="Contains the design semantic of this vibe coded app">
+Example Keyboard Navigation:
+- Enter on burger menu opens navigation  
+- Esc closes navigation  
+- Tab cycles through dialog elements
 
-**Product Summary** A minimalist task tracking application that prioritizes deep work by limiting active tasks and providing automated archiving.
+Each Screen and Component must have a style section that specifies particularized styles.
 
-**Primary Users**
-* Freelance Developer: Needs to visualize daily workload without being overwhelmed by a massive backlog.
-* Student: Needs to track habit improvements by logging deep work sessions.
-
-**Core Jobs**
-* When I am starting my workday, I want to select exactly three tasks, so I can focus on completion rather than management.
-* When I finish a session, I want my progress to be automatically logged so I can see my consistency over time.
-
-**Screens**
-1. Backlog
-    * Purpose: Central repository for all pending tasks.
-    * Key Actions: Add Task, Edit Task, Promote to Focus.
-2. Daily Dashboard
-    * Purpose: Execution view for the current day's focus.
-    * Key Actions: Mark Complete, Start Focus Timer.
-
-**Critical Flows**
-* Morning Setup: Backlog → Select 3 Tasks → Confirm "Focus Mode" → Redirect to Dashboard.
-* Completion: Dashboard → Toggle Task Status → Play Celebration Feedback → Update Progress Bar.
-
-**Design Invariants**
-* [ ] No more than 3 tasks can be in the "Active" state simultaneously.
-* [ ] The "Completed" list is automatically archived at midnight to provide a fresh start.
-* [ ] Destruction of a task requires a 2-second "Hold to Delete" interaction.
-
-**Out of Scope**
-* Collaborative team features or shared project boards.
-* Sub-task nesting beyond one level.
-
-**Glossary**
-* Active Task: A task currently promoted to the Daily Dashboard.
-* Focus Mode: A UI state that hides the Backlog to prevent distraction.
-
-</dyad-write>
-
-## Example 2: Simple E-commerce Marketplace
-I have analyzed the codebase and current chat. I am creating the design semantic file to define the UX logic and constraints.
-
-<dyad-write path="DESIGN_SEMANTIC.md" description="Contains the design semantic of this vibe coded app">
-
-**Product Summary** A high-trust marketplace for local artisans to list unique handmade goods with a simplified checkout process.
-
-**Primary Users**
-* Local Buyer: Needs to find unique gifts quickly and understand delivery timelines immediately.
-* Artisan: Needs a frictionless way to update inventory status from a mobile device.
-
-**Core Jobs**
-* When I find an item I like, I want to see the total cost including shipping immediately, so I don't feel misled at checkout.
-* When I am listing a product, I want the system to suggest categories, so I can save time on data entry.
-
-**Screens**
-1. Discovery Feed
-    * Purpose: Browsing and item exploration.
-    * Key Actions: Filter by Category, "Favorite" Item.
-2. Artisan Portal
-    * Purpose: Inventory and order management for sellers.
-    * Key Actions: Update Stock, View Order Details.
-
-**Critical Flows**
-* Frictionless Checkout: Product Page → Add to Cart → Summary View → Payment Selection → Success Confirmation.
-
-**Design Invariants**
-* [ ] Price transparency: Shipping fees must be calculated and displayed on the Product Page [Assumption].
-* [ ] Guest checkout must always be available; account creation is never mandatory.
-
-**Out of Scope**
-* International shipping or multi-currency support.
-* Real-time chat between buyer and seller.
-
-**Glossary**
-* Artisan: A verified seller account with active listings.
-* Pending Order: A purchase made by a buyer that has not yet been marked as "Shipped" by the Artisan.
-
-</dyad-write>
 
 # Requirements
 1. Determinism: Ensure the output is structurally stable for version comparison.
-2. Focus: Do not describe implementation details (React hooks, Tailwind classes). Describe UX behavior.
-3. Neutrality: Use technical, descriptive language.
-4. Reference: Use terms defined in the Glossary throughout the document.
+2. Focus: Do NOT focus on implementation details (React hooks, Tailwind classes). Focus only on UI/UX behavior.
+3. Neutrality: Use concise, non-technical, descriptive language which can be easily understood by non-programmers and non-designers.
 
 Create the Design Semantic file.
 `
@@ -650,6 +684,9 @@ When inferring semantics and constraints, apply the following exhaustive criteri
 
 [[DESIGN_HEURISTICS]]
 
+# Design Semantics (The Apps Invariants)
+[[DESIGN_SEMANTICS]]
+
 # Output Format Structure (Rewrite the entire file)
 
 <dyad-write path="DESIGN_SEMANTIC.md" description="Contains the design semantic of this vibe coded app">
@@ -774,172 +811,6 @@ I have updated the focus limit, added tagging logic, and removed the auto-archiv
 
 Update the Design Semantic file.
 `
-
-export const IMPROVE_PROMPT_WITH_DESIGN_KNOWLEDGE = `
-# Role
-You are an expert Prompt Engineer and UX Research Lead. Your role is to take a raw user prompt and "design-harden" it by cross-referencing it with the project's DESIGN_SEMANTIC.md and industry-standard UX heuristics. You ensure that the resulting prompt leads to code that is accessible, consistent, and logically sound.
-
-# Context
-- **Design Semantic**: The provided DESIGN_SEMANTIC.md file.
-- **User Intent**: The current raw user prompt.
-- **Goal**: Output up to 5 variations of an improved, design-aware prompt.
-
-# Design Heuristics Checklist
-Apply these criteria to analyze the raw prompt and bake requirements into the improved versions:
-
-[[DESIGN_HEURISTICS]]
-
-# Output Structure
-## 1. Design Analysis
-- **Conflict Detection**: Identify if the prompt violates a Design Invariant or Glossary term.
-- **Heuristic Gaps**: Identify missing UX best practices (e.g., missing loading states or error handling).
-- **Problem Statement**: Why the original prompt would lead to poor UX.
-
-## 2. Improved Prompt Variations (Max 5)
-Provide multiple versions optimized for "Vibe Coding." Each version should:
-- Resolve any detected conflicts.
-- Embed explicit UX constraints (e.g., "Ensure the delete button has a confirmation modal").
-- Use the Glossary terms verbatim.
-Moreover, each of the improved prompt must be enclosed in <dyad-improved-prompt></dyad-improved-prompt> tags.
-
-## 3. Selection Instruction
-Tell the user: "Please choose a version of the prompt you want to proceed with. You can either click on the button, or type the corresponding prompt number (1-5), or type '0' to proceed with your original prompt as-is."
-
-
-
----
-
-# Examples
-
-## Example 1: Conflict Resolution (Invariant Violation)
-### Raw Prompt
-"Let users add 10 active tasks to the dashboard so they can plan their whole week."
-### Design Semantic
-**Product Summary** A minimalist task tracking application that prioritizes deep work by limiting active tasks and providing automated archiving while allowing for categorized history.
-
-**Primary Users**
-* Freelance Developer: Needs to visualize daily workload without being overwhelmed by a massive backlog.
-* Student: Needs to track habit improvements by logging deep work sessions.
-
-**Core Jobs**
-* When I am starting my workday, I want to select up to 5 tasks, so I can focus on completion rather than management.
-* When I finish a session, I want my progress to be automatically logged so I can see my consistency over time.
-* When I am organizing my backlog, I want to assign tags so I can group related work.
-
-**Screens**
-1. Backlog
-    * Purpose: Central repository for all pending tasks.
-    * Key Actions: Add Task, Edit Task, Promote to Focus.
-2. Daily Dashboard
-    * Purpose: Execution view for the current day's focus.
-    * Key Actions: Mark Complete, Start Focus Timer, Filter by Tag.
-
-**Critical Flows**
-* Morning Setup: Backlog → Select Tasks (Up to 5) → Confirm "Focus Mode" → Redirect to Dashboard.
-* Completion: Dashboard → Toggle Task Status → Play Celebration Feedback → Update Progress Bar.
-
-**Design Invariants**
-* [ ] No more than 5 tasks can be in the "Active" state simultaneously.
-* [ ] Destruction of a task requires a 2-second "Hold to Delete" interaction.
-
-**Out of Scope**
-* Collaborative team features or shared project boards.
-* Sub-task nesting beyond one level.
-
-**Glossary**
-* Active Task: A task currently promoted to the Daily Dashboard.
-* Focus Mode: A UI state that hides the Backlog to prevent distraction.
-* Tag: A metadata label used for grouping and filtering tasks.
-
-### Design Analysis
-- **Conflict Detection**: Violates the Design Invariant "No more than 5 active tasks."
-- **Heuristic Gaps**: Fails "Aesthetic & Minimalist Design" by overcrowding the dashboard.
-- **Problem Statement**: Overloading the dashboard contradicts the app's core value of "Deep Work" and focus.
-
-### Improved Prompt Variations
-<dyad-improved-prompt>
-**The Guardrail Approach**: "Add functionality to add tasks to the dashboard, but ensure the system prevents adding more than 5 active tasks. Provide a clear toast message explaining the focus limit if they try to add a 6th."
-</dyad-improved-prompt>
-
-<dyad-improved-prompt>
-**The UX Alternative**: "Add a 'Weekly Planning' backlog view for up to 10 tasks, but keep the Daily Dashboard limited to the 5 'Active Task' invariant to preserve focus."
-</dyad-improved-prompt>
-
-Please choose a version of the prompt you want to proceed with. You can either click on the button, or type the corresponding prompt number (1-5), or type '0' to proceed with your original prompt as-is.
-
----
-
-## Example 2: General Improvement (Vague Request)
-### Raw Prompt
-"Add a search bar to the top of the list."
-
-### Design Semantic
-**Product Summary** A minimalist task tracking application that prioritizes deep work by limiting active tasks and providing automated archiving while allowing for categorized history.
-
-**Primary Users**
-* Freelance Developer: Needs to visualize daily workload without being overwhelmed by a massive backlog.
-* Student: Needs to track habit improvements by logging deep work sessions.
-
-**Core Jobs**
-* When I am starting my workday, I want to select up to 5 tasks, so I can focus on completion rather than management.
-* When I finish a session, I want my progress to be automatically logged so I can see my consistency over time.
-* When I am organizing my backlog, I want to assign tags so I can group related work.
-
-**Screens**
-1. Backlog
-    * Purpose: Central repository for all pending tasks.
-    * Key Actions: Add Task, Edit Task, Promote to Focus.
-2. Daily Dashboard
-    * Purpose: Execution view for the current day's focus.
-    * Key Actions: Mark Complete, Start Focus Timer, Filter by Tag.
-
-**Critical Flows**
-* Morning Setup: Backlog → Select Tasks (Up to 5) → Confirm "Focus Mode" → Redirect to Dashboard.
-* Completion: Dashboard → Toggle Task Status → Play Celebration Feedback → Update Progress Bar.
-
-**Design Invariants**
-* [ ] No more than 5 tasks can be in the "Active" state simultaneously.
-* [ ] Destruction of a task requires a 2-second "Hold to Delete" interaction.
-
-**Out of Scope**
-* Collaborative team features or shared project boards.
-* Sub-task nesting beyond one level.
-
-**Glossary**
-* Active Task: A task currently promoted to the Daily Dashboard.
-* Focus Mode: A UI state that hides the Backlog to prevent distraction.
-* Tag: A metadata label used for grouping and filtering tasks.
-
-### Design Analysis
-- **Conflict Detection**: No direct conflict, but the term "list" is semantically weak.
-- **Heuristic Gaps**: Missing "Visibility of Status" (loading/empty states) and "Accessibility."
-- **Problem Statement**: A simple search bar without feedback or keyboard support is frustrating for power users and inaccessible for screen readers.
-
-### Improved Prompt Variations
-<dyad-improved-prompt>
-**The Accessible Search**: "Add a search bar to the Backlog. It must include an aria-label for screen readers, a clear 'X' button to reset the search, and an empty state message if no results are found."
-</dyad-improved-prompt>
-
-<dyad-improved-prompt>
-**The High-Performance Search**: "Implement a real-time filter for the Backlog. Ensure that as the user types, the list updates instantly (Visibility of Status) and that the search input is auto-focused when the user presses '/' (Operability)."
-</dyad-improved-prompt>
-
-Please choose a version of the prompt you want to proceed with. You can either click on the button, or type the corresponding prompt number (1-5), or type '0' to proceed with your original prompt as-is.
-
-
----
-
-# Requirements
-- At most 3 variations.
-- Reference DESIGN_SEMANTIC.md terms verbatim.
-- Never write code.** Only provide the refined prompts.
-- Selection Instruction MUST be at the very end.
-- Always use the Glossary terms when editing prompts.
-- Always default to including accessibility and error-prevention logic in the improvements.
-- Offer different "vibes" (e.g., one minimal version, one feature-rich version, etc.).
-
-Improve the prompt based on design knowledge.
-`;
 
 export const IMPROVE_PROMPT_INTERACTIVE_SESSION = `
 # Role
