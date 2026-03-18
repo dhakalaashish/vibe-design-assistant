@@ -41,6 +41,7 @@ export type PreviewMode =
   | "preview"
   | "design"
   | "guided-build"
+  | "heuristics"
   | "code"
   | "problems"
   | "configure"
@@ -134,10 +135,9 @@ export const ActionHeader = () => {
           targetRef = previewRef;
           break;
         case "design":
-          targetRef = designRef;
-          break;
         case "guided-build":
-          targetRef = guidedBuildRef;
+        case "heuristics":
+          targetRef = designRef;
           break;
         case "code":
           targetRef = codeRef;
@@ -248,13 +248,6 @@ export const ActionHeader = () => {
             <Palette size={iconSize} />,
             "Design",
             "design-mode-button",
-          )}
-          {renderButton(
-            "guided-build",
-            guidedBuildRef,
-            <Notebook size={iconSize} />,
-            "GuidedBuild",
-            "guided-build-mode-button",
           )}
           {renderButton(
             "problems",

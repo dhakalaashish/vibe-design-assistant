@@ -606,7 +606,7 @@ function EditFindingDialog({
     );
 }
 
-export const GuidedBuildPanel = () => {
+export const GuidedBuildTab = () => {
     const selectedAppId = useAtomValue(selectedAppIdAtom);
     const setSelectedChatId = useSetAtom(selectedChatIdAtom);
     const navigate = useNavigate();

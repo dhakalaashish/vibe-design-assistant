@@ -18,7 +18,6 @@ import { Console } from "./Console";
 import { useRunApp } from "@/hooks/useRunApp";
 import { PublishPanel } from "./PublishPanel";
 import { SecurityPanel } from "./SecurityPanel";
-import { GuidedBuildPanel } from "./GuidedBuildPanel";
 
 interface ConsoleHeaderProps {
   isOpen: boolean;
@@ -116,10 +115,8 @@ export function PreviewPanel() {
             <div className="h-full overflow-y-auto">
               {previewMode === "preview" ? (
                 <PreviewIframe key={key} loading={loading} />
-              ) : previewMode === "design" ? (
+              ) : ["design", "guided-build", "heuristics"].includes(previewMode) ? (
                 <DesignView loading={loading} app={app} />
-              ) : previewMode === "guided-build" ? (
-                <GuidedBuildPanel />
               ) : previewMode === "code" ? (
                 <CodeView loading={loading} app={app} />
               ) : previewMode === "configure" ? (
