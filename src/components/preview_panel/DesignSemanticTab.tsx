@@ -8,15 +8,15 @@ import React, { useState, useRef, useEffect, useMemo } from "react";
 import Editor, { OnMount } from "@monaco-editor/react";
 import { useLoadAppFile } from "@/hooks/useLoadAppFile";
 import { useTheme } from "@/contexts/ThemeContext";
-import { Circle, Save, RefreshCw, Layout, Code, MousePointerClick, ArrowLeft, ArrowDown, ArrowRight, ZoomInIcon, ZoomOutIcon, Briefcase } from "lucide-react";
+import { Circle, Save, RefreshCw, Layout, Code, MousePointerClick, ArrowRight, ArrowLeft, ArrowDown, ZoomInIcon, ZoomOutIcon, Briefcase, Edit2, Trash2, ChevronRight, ChevronDown, Plus } from "lucide-react";
 import "@/components/chat/monaco";
 import { IpcClient } from "@/ipc/ipc_client";
 import { showError, showSuccess, showWarning } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSettings } from "@/hooks/useSettings";
@@ -26,175 +26,185 @@ import { getLanguage } from "@/utils/get_language";
 type CanvasMode = 'project' | 'structure' | 'flows';
 
 interface DesignFileEditorProps {
-  appId: number | null;
-  filePath: string;
+    appId: number | null;
+    filePath: string;
 }
 
 interface BreadcrumbProps {
-  path: string;
-  hasUnsavedChanges: boolean;
-  onSave: () => void;
-  isSaving: boolean;
+    path: string;
+    hasUnsavedChanges: boolean;
+    onSave: () => void;
+    isSaving: boolean;
 }
 
 const Breadcrumb: React.FC<BreadcrumbProps> = ({
-  path,
-  hasUnsavedChanges,
-  onSave,
-  isSaving,
+    path,
+    hasUnsavedChanges,
+    onSave,
+    isSaving,
 }) => {
-  const segments = path.split("/").filter(Boolean);
+    const segments = path.split("/").filter(Boolean);
 
-  return (
-    <div className="flex items-center justify-between px-4 py-2 text-sm text-gray-600 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">
-      <div className="flex items-center gap-1 overflow-hidden">
-        <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onSave}
-                disabled={!hasUnsavedChanges || isSaving}
-                className="h-6 w-6 p-0"
-                data-testid="save-file-button"
-              >
-                <Save size={12} />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {hasUnsavedChanges ? "Save changes" : "No unsaved changes"}
-            </TooltipContent>
-          </Tooltip>
-          {hasUnsavedChanges && (
-            <Circle
-              size={8}
-              fill="currentColor"
-              className="text-amber-600 dark:text-amber-400"
-            />
-          )}
+    return (
+        <div className="flex items-center justify-between px-4 py-2 text-sm text-gray-600 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center gap-1 overflow-hidden">
+                <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={onSave}
+                                disabled={!hasUnsavedChanges || isSaving}
+                                className="h-6 w-6 p-0"
+                                data-testid="save-file-button"
+                            >
+                                <Save size={12} />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            {hasUnsavedChanges ? "Save changes" : "No unsaved changes"}
+                        </TooltipContent>
+                    </Tooltip>
+                    {hasUnsavedChanges && (
+                        <Circle
+                            size={8}
+                            fill="currentColor"
+                            className="text-amber-600 dark:text-amber-400"
+                        />
+                    )}
+                </div>
+            </div>
         </div>
-      </div>
-    </div>
-  );
+    );
 };
 
 const DesignFileEditor = ({ appId, filePath }: DesignFileEditorProps) => {
-  const { content, loading, error } = useLoadAppFile(appId, filePath);
-  const { theme } = useTheme();
-  const [value, setValue] = useState<string | undefined>(undefined);
-  const [displayUnsavedChanges, setDisplayUnsavedChanges] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const { settings } = useSettings();
-  const originalValueRef = useRef<string | undefined>(undefined);
-  const editorRef = useRef<any>(null);
-  const isSavingRef = useRef<boolean>(false);
-  const needsSaveRef = useRef<boolean>(false);
-  const currentValueRef = useRef<string | undefined>(undefined);
+    const { content, loading, error } = useLoadAppFile(appId, filePath);
+    const { theme } = useTheme();
+    const [value, setValue] = useState<string | undefined>(undefined);
+    const [displayUnsavedChanges, setDisplayUnsavedChanges] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const { settings } = useSettings();
+    const originalValueRef = useRef<string | undefined>(undefined);
+    const editorRef = useRef<any>(null);
+    const isSavingRef = useRef<boolean>(false);
+    const needsSaveRef = useRef<boolean>(false);
+    const currentValueRef = useRef<string | undefined>(undefined);
 
-  const queryClient = useQueryClient();
-  const { checkProblems } = useCheckProblems(appId);
+    const queryClient = useQueryClient();
+    const { checkProblems } = useCheckProblems(appId);
 
-  useEffect(() => {
-    if (content !== null) {
-      setValue(content);
-      originalValueRef.current = content;
-      currentValueRef.current = content;
-      needsSaveRef.current = false;
-      setDisplayUnsavedChanges(false);
-      setIsSaving(false);
-    }
-  }, [content, filePath]);
+    useEffect(() => {
+        if (content !== null) {
+            setValue(content);
+            originalValueRef.current = content;
+            currentValueRef.current = content;
+            needsSaveRef.current = false;
+            setDisplayUnsavedChanges(false);
+            setIsSaving(false);
+        }
+    }, [content, filePath]);
 
-  useEffect(() => {
-    setDisplayUnsavedChanges(needsSaveRef.current);
-  }, [needsSaveRef.current]);
+    useEffect(() => {
+        setDisplayUnsavedChanges(needsSaveRef.current);
+    }, [needsSaveRef.current]);
 
-  const isDarkMode =
-    theme === "dark" ||
-    (theme === "system" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches);
-  const editorTheme = isDarkMode ? "dyad-dark" : "dyad-light";
+    const isDarkMode =
+        theme === "dark" ||
+        (theme === "system" &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches);
+    const editorTheme = isDarkMode ? "dyad-dark" : "dyad-light";
 
-  const handleEditorDidMount: OnMount = (editor) => {
-    editorRef.current = editor;
-    editor.onDidBlurEditorText(() => {
-      if (needsSaveRef.current) {
-        saveFile();
-      }
-    });
-  };
+    const handleEditorDidMount: OnMount = (editor) => {
+        editorRef.current = editor;
+        editor.onDidBlurEditorText(() => {
+            if (needsSaveRef.current) {
+                saveFile();
+            }
+        });
+    };
 
-  const handleEditorChange = (newValue: string | undefined) => {
-    setValue(newValue);
-    currentValueRef.current = newValue;
-    const hasChanged = newValue !== originalValueRef.current;
-    needsSaveRef.current = hasChanged;
-    setDisplayUnsavedChanges(hasChanged);
-  };
+    const handleEditorChange = (newValue: string | undefined) => {
+        setValue(newValue);
+        currentValueRef.current = newValue;
+        const hasChanged = newValue !== originalValueRef.current;
+        needsSaveRef.current = hasChanged;
+        setDisplayUnsavedChanges(hasChanged);
+    };
 
-  const saveFile = async () => {
-    if (!appId || !currentValueRef.current || !needsSaveRef.current || isSavingRef.current) return;
-    try {
-      isSavingRef.current = true;
-      setIsSaving(true);
-      const ipcClient = IpcClient.getInstance();
-      const { warning } = await ipcClient.editAppFile(
-        appId,
-        filePath,
-        currentValueRef.current,
-      );
-      await queryClient.invalidateQueries({ queryKey: ["versions", appId] });
-      if (settings?.enableAutoFixProblems) {
-        checkProblems();
-      }
-      if (warning) showWarning(warning);
-      else showSuccess("File saved");
-      originalValueRef.current = currentValueRef.current;
-      needsSaveRef.current = false;
-      setDisplayUnsavedChanges(false);
-    } catch (error) {
-      showError(error);
-    } finally {
-      isSavingRef.current = false;
-      setIsSaving(false);
-    }
-  };
+    const saveFile = async () => {
+        if (!appId || !currentValueRef.current || !needsSaveRef.current || isSavingRef.current) return;
+        try {
+            isSavingRef.current = true;
+            setIsSaving(true);
+            const ipcClient = IpcClient.getInstance();
+            const { warning } = await ipcClient.editAppFile(
+                appId,
+                filePath,
+                currentValueRef.current,
+            );
+            await queryClient.invalidateQueries({ queryKey: ["versions", appId] });
+            if (settings?.enableAutoFixProblems) {
+                checkProblems();
+            }
+            if (warning) showWarning(warning);
+            else showSuccess("File saved");
+            originalValueRef.current = currentValueRef.current;
+            needsSaveRef.current = false;
+            setDisplayUnsavedChanges(false);
+        } catch (error) {
+            showError(error);
+        } finally {
+            isSavingRef.current = false;
+            setIsSaving(false);
+        }
+    };
 
-  if (loading) return <div className="p-4">Loading file content...</div>;
-  if (error) return <div className="p-4 text-red-500">Error: {error.message}</div>;
-  if (!content) return <div className="p-4 text-gray-500">No content available</div>;
+    if (loading) return <div className="p-4">Loading file content...</div>;
+    if (error) return <div className="p-4 text-red-500">Error: {error.message}</div>;
+    if (!content) return <div className="p-4 text-gray-500">No content available</div>;
 
-  return (
-    <div className="h-full flex flex-col">
-      <Breadcrumb path={filePath} hasUnsavedChanges={displayUnsavedChanges} onSave={saveFile} isSaving={isSaving} />
-      <div className="flex-1 overflow-hidden">
-        <Editor
-          height="100%"
-          defaultLanguage={getLanguage(filePath)}
-          value={value}
-          theme={editorTheme}
-          onChange={handleEditorChange}
-          onMount={handleEditorDidMount}
-          options={{ minimap: { enabled: true }, scrollBeyondLastLine: false, wordWrap: "on", automaticLayout: true, fontFamily: "monospace", fontSize: 13, lineNumbers: "on" }}
-        />
-      </div>
-    </div>
-  );
+    return (
+        <div className="h-full flex flex-col">
+            <Breadcrumb path={filePath} hasUnsavedChanges={displayUnsavedChanges} onSave={saveFile} isSaving={isSaving} />
+            <div className="flex-1 overflow-hidden">
+                <Editor
+                    height="100%"
+                    defaultLanguage={getLanguage(filePath)}
+                    value={value}
+                    theme={editorTheme}
+                    onChange={handleEditorChange}
+                    onMount={handleEditorDidMount}
+                    options={{ minimap: { enabled: true }, scrollBeyondLastLine: false, wordWrap: "on", automaticLayout: true, fontFamily: "monospace", fontSize: 13, lineNumbers: "on" }}
+                />
+            </div>
+        </div>
+    );
 };
 
-
 const DesignCanvasUI = ({ content }: { content: string }) => {
-    const [mode, setMode] = useState<CanvasMode>('project'); 
+    const [mode, setMode] = useState<CanvasMode>('project');
     const [selectedNode, setSelectedNode] = useState<any | null>(null);
+    const [nodeToDelete, setNodeToDelete] = useState<any | null>(null);
     const [activeFlow, setActiveFlow] = useState<string | null>(null);
     const [activeFunction, setActiveFunction] = useState<string | null>(null);
 
-    // View Options (Applied to Structure)
+    // View Options 
     const [zoomLevel, setZoomLevel] = useState<number>(1);
-    const [showNav, setShowNav] = useState<boolean>(true);
-    const [showStyles, setShowStyles] = useState<boolean>(true);
+    const [showNav, setShowNav] = useState<boolean>(false);
+    const [showStyles, setShowStyles] = useState<boolean>(false);
     const [showFunctionality, setShowFunctionality] = useState<boolean>(false);
+
+    // Expand/Collapse State
+    const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+
+    // Inline Editing State (for Project Tab)
+    const [inlineEdit, setInlineEdit] = useState<{ field: string, value: string, index?: number } | null>(null);
+    const [personaDraft, setPersonaDraft] = useState<any>(null);
+
+    // Precise Hover Tracking
+    const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
 
     // Flow Sequence Layout State
     const flowContainerRef = useRef<HTMLDivElement>(null);
@@ -203,32 +213,29 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
     // Editable Graph State
     const [graph, setGraph] = useState<any>(null);
 
-    // Parse the embedded JSON from the Markdown ONCE
     useEffect(() => {
         try {
             const match = content.match(/```json\n([\s\S]*?)\n```/);
-            if (match && match[1]) {
-                const parsedGraph = JSON.parse(match[1]);
-                setGraph(parsedGraph);
-                if (parsedGraph.edges?.flows?.length > 0) {
-                    setActiveFlow(parsedGraph.edges.flows[0].name);
-                }
+            const parsedGraph = match && match[1] ? JSON.parse(match[1]) : JSON.parse(content);
+            setGraph(parsedGraph);
+            if (parsedGraph.edges?.flows?.length > 0) {
+                setActiveFlow(parsedGraph.edges.flows[0].name);
+            }
+            if (expandedNodes.size === 0 && parsedGraph.nodes?.screens) {
+                setExpandedNodes(new Set());
             }
         } catch (e) {
             console.error("Failed to parse Design Semantic JSON", e);
         }
     }, [content]);
 
-    // Dynamic sizing for the "Snake" Flow Layout
     useEffect(() => {
         if (mode !== 'flows') return;
         const container = flowContainerRef.current;
         if (!container) return;
-        
         const observer = new ResizeObserver((entries) => {
             for (let entry of entries) {
                 const width = entry.contentRect.width;
-                // Node width is 256px. Arrow width is 64px. Total node spacing is 320px.
                 const cols = Math.max(1, Math.floor(width / 320));
                 setItemsPerRow(cols);
             }
@@ -236,6 +243,27 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
         observer.observe(container);
         return () => observer.disconnect();
     }, [mode, activeFlow]);
+
+    const depthMap = useMemo(() => {
+        const map = new Map();
+        if (!graph) return map;
+        const calcDepth = (id: string): number => {
+            if (id === 'body') return -1;
+            if (map.has(id)) return map.get(id);
+            const node = [...(graph.nodes?.screens || []), ...(graph.nodes?.components || [])].find((n: any) => n.id === id);
+            if (!node) return 0;
+            const d = calcDepth(node.parent) + 1;
+            map.set(id, d);
+            return d;
+        };
+        [...(graph.nodes?.screens || []), ...(graph.nodes?.components || [])].forEach((n: any) => calcDepth(n.id));
+        return map;
+    }, [graph]);
+
+    const nodesWithChildren = useMemo(() => {
+        if (!graph) return new Set();
+        return new Set([...(graph.nodes?.screens || []), ...(graph.nodes?.components || [])].map((n: any) => n.parent));
+    }, [graph]);
 
     if (!graph) {
         return (
@@ -246,53 +274,169 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
         );
     }
 
-    // -- EDITING LOGIC --
+    const canZoomIn = [...(graph?.nodes?.screens || []), ...(graph?.nodes?.components || [])].some((n: any) => nodesWithChildren.has(n.id) && !expandedNodes.has(n.id));
+    const canZoomOut = expandedNodes.size > 0;
+
+    const handleZoomIn = () => {
+        const expandedDepths = Array.from(expandedNodes).map(id => depthMap.get(id) || 0);
+        const currentMaxDepth = expandedDepths.length > 0 ? Math.max(...expandedDepths) : -1;
+        const targetDepth = currentMaxDepth + 1;
+        const nodesToExpand = [...(graph.nodes?.screens || []), ...(graph.nodes?.components || [])].filter((n: any) => depthMap.get(n.id) === targetDepth && nodesWithChildren.has(n.id)).map((n: any) => n.id);
+        if (nodesToExpand.length > 0) setExpandedNodes(prev => new Set([...prev, ...nodesToExpand]));
+    };
+
+    const handleZoomOut = () => {
+        const expandedDepths = Array.from(expandedNodes).map(id => depthMap.get(id) || 0);
+        if (expandedDepths.length === 0) return;
+        const currentMaxDepth = Math.max(...expandedDepths);
+        const newExpanded = new Set(expandedNodes);
+        Array.from(expandedNodes).forEach(id => {
+            if (depthMap.get(id) === currentMaxDepth) newExpanded.delete(id);
+        });
+        setExpandedNodes(newExpanded);
+    };
+
+    // -- EDITING LOGIC (Using Deep Copy for Safety) --
     const handleUpdateNode = (field: string, value: string) => {
         if (!selectedNode) return;
-        
         setGraph((prev: any) => {
-            const newGraph = { ...prev };
-            
+            const next = JSON.parse(JSON.stringify(prev)); // Deep copy to prevent strict mode mutation bugs
             if (selectedNode.type === 'Screen' || selectedNode.type === 'Component') {
                 const isScreen = selectedNode.parent === 'body';
-                const arrayToUpdate = isScreen ? newGraph.nodes.screens : newGraph.nodes.components;
+                const arrayToUpdate = isScreen ? next.nodes.screens : next.nodes.components;
                 const index = arrayToUpdate.findIndex((n: any) => n.id === selectedNode.id);
                 if (index !== -1) arrayToUpdate[index] = { ...arrayToUpdate[index], [field]: value };
-            } 
+            }
             else if (selectedNode.type === 'Project') {
-                if (field === 'description') newGraph.strategy.productDescription = value;
-                if (field === 'objectiveUsers') newGraph.strategy.objectives.forUsers = value;
-                if (field === 'objectiveCreator') newGraph.strategy.objectives.forCreator = value;
-                if (field === 'outOfScope') newGraph.scope.outOfScope = value.split('\n').filter((l:string)=>l.trim()!=='');
+                if (field === 'description') next.strategy.productDescription = value;
+                if (field === 'objectiveUsers') next.strategy.objectives.forUsers = value;
+                if (field === 'objectiveCreator') next.strategy.objectives.forCreator = value;
+                if (field === 'outOfScope') next.scope.outOfScope = value.split('\n').filter((l: string) => l.trim() !== '');
             }
             else if (selectedNode.type === 'Persona') {
                 const idx = selectedNode.index;
-                if (newGraph.strategy.personas[idx]) {
-                    newGraph.strategy.personas[idx] = { ...newGraph.strategy.personas[idx], [field]: value };
+                if (next.strategy.personas[idx]) {
+                    next.strategy.personas[idx] = { ...next.strategy.personas[idx], [field]: value };
                 }
             }
-            return newGraph;
+            return next;
         });
 
         setSelectedNode((prev: any) => ({ ...prev, [field]: value }));
     };
 
-    const handleAddChild = () => {
-        if (!selectedNode || (selectedNode.type !== 'Screen' && selectedNode.type !== 'Component')) return;
+    const saveInlineEdit = () => {
+        if (!inlineEdit) return;
+        setGraph((prev: any) => {
+            const next = JSON.parse(JSON.stringify(prev));
+            if (inlineEdit.field === 'description') next.strategy.productDescription = inlineEdit.value;
+            if (inlineEdit.field === 'objectiveUsers') next.strategy.objectives.forUsers = inlineEdit.value;
+            if (inlineEdit.field === 'objectiveCreator') next.strategy.objectives.forCreator = inlineEdit.value;
+            if (inlineEdit.field === 'constraint') {
+                if (!next.scope) next.scope = { outOfScope: [] };
+                if (inlineEdit.index !== undefined) {
+                    next.scope.outOfScope[inlineEdit.index] = inlineEdit.value;
+                } else {
+                    next.scope.outOfScope.push(inlineEdit.value);
+                }
+            }
+            return next;
+        });
+        setInlineEdit(null);
+    };
+
+    const deleteConstraint = (index: number) => {
+        setGraph((prev: any) => {
+            const next = JSON.parse(JSON.stringify(prev));
+            next.scope.outOfScope.splice(index, 1);
+            return next;
+        });
+    };
+
+    const handleAddChild = (parentId: string, isScreenParent: boolean) => {
         const newId = `comp-new-${Date.now()}`;
-        const newComp = { id: newId, parent: selectedNode.id, name: "New Component", purpose: "Describe purpose...", styles: "Inherited from Global" };
-        setGraph((prev: any) => ({ ...prev, nodes: { ...prev.nodes, components: [...prev.nodes.components, newComp] } }));
+        const newComp = { id: newId, parent: parentId, name: "New Component", purpose: "Describe purpose...", styles: "Inherited from Global" };
+        setGraph((prev: any) => {
+            const next = JSON.parse(JSON.stringify(prev));
+            next.nodes.components.push(newComp);
+            return next;
+        });
+        setExpandedNodes(prev => new Set([...prev, parentId]));
+    };
+
+    const handleDeleteNode = () => {
+        if (!nodeToDelete) return;
+        setGraph((prev: any) => {
+            const next = JSON.parse(JSON.stringify(prev));
+            const deleteRecursive = (id: string) => {
+                next.nodes.screens = next.nodes.screens.filter((s: any) => s.id !== id);
+                next.nodes.components = next.nodes.components.filter((c: any) => c.id !== id);
+                const children = [...(next.nodes.screens || []), ...(next.nodes.components || [])].filter(c => c.parent === id);
+                children.forEach(c => deleteRecursive(c.id));
+            };
+            deleteRecursive(nodeToDelete.id);
+            return next;
+        });
+        if (selectedNode?.id === nodeToDelete.id) setSelectedNode(null);
+        setNodeToDelete(null);
     };
 
     const handleAddPersona = () => {
         const newPersona = { name: "New Persona", demographics: "Add demographic details...", technicalProfile: "Add tech profile...", knowledgeProfile: "Add knowledge profile..." };
         setGraph((prev: any) => {
-            const newGraph = { ...prev };
-            if (!newGraph.strategy) newGraph.strategy = {};
-            if (!newGraph.strategy.personas) newGraph.strategy.personas = [];
-            newGraph.strategy.personas.push(newPersona);
-            return newGraph;
+            const next = JSON.parse(JSON.stringify(prev));
+            if (!next.strategy) next.strategy = {};
+            if (!next.strategy.personas) next.strategy.personas = [];
+            next.strategy.personas.push(newPersona);
+            return next;
         });
+    };
+
+    const deletePersona = (index: number) => {
+        setGraph((prev: any) => {
+            const next = JSON.parse(JSON.stringify(prev));
+            next.strategy.personas.splice(index, 1);
+            return next;
+        });
+    };
+
+    const openPersonaEditor = (p?: any, index?: number) => {
+        if (p) {
+            const demParts = p.demographics ? p.demographics.split(',').map((s: string) => s.trim()) : [];
+            setPersonaDraft({
+                isNew: false, index, name: p.name || '',
+                gender: demParts[0] || '', age: demParts[1] || '', education: demParts[2] || '', marital: demParts[3] || '', income: demParts[4] || '',
+                expertise: p.technicalProfile?.includes('Low') ? 'Low' : p.technicalProfile?.includes('Medium') ? 'Medium' : p.technicalProfile?.includes('High') ? 'High' : '',
+                internet: p.technicalProfile?.match(/Uses internet (.*?)(?:\.|$)/)?.[1] || '',
+                sites: p.technicalProfile?.match(/Favorite sites: (.*?)(?:\.|$)/)?.[1] || '',
+                knowledgeProfile: p.knowledgeProfile || ''
+            });
+        } else {
+            setPersonaDraft({
+                isNew: true, name: 'New Persona', gender: '', age: '', education: '', marital: '', income: '', expertise: '', internet: '', sites: '', knowledgeProfile: ''
+            });
+        }
+        setSelectedNode({ type: 'PersonaForm' });
+    };
+
+    const savePersonaDraft = () => {
+        if (!personaDraft) return;
+        setGraph((prev: any) => {
+            const next = JSON.parse(JSON.stringify(prev));
+            const techStr = `${personaDraft.expertise} expertise. Uses internet ${personaDraft.internet}. Favorite sites: ${personaDraft.sites}.`.trim();
+            const p = {
+                name: personaDraft.name,
+                demographics: [personaDraft.gender, personaDraft.age, personaDraft.education, personaDraft.marital, personaDraft.income].filter(Boolean).join(', '),
+                technicalProfile: techStr.replace(/^[. ]+|[. ]+$/g, ''),
+                knowledgeProfile: personaDraft.knowledgeProfile
+            };
+            if (!next.strategy) next.strategy = {};
+            if (!next.strategy.personas) next.strategy.personas = [];
+            if (personaDraft.isNew) next.strategy.personas.push(p);
+            else next.strategy.personas[personaDraft.index] = p;
+            return next;
+        });
+        setSelectedNode(null);
     };
 
     const handleToggleFunctionality = (checked: boolean) => {
@@ -323,7 +467,7 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                 };
                 return hasActiveChild(id);
             }
-            return true; 
+            return true;
         }
         if (mode === 'flows' && activeFlow) {
             const flow = graph.edges?.flows?.find((f: any) => f.name === activeFlow);
@@ -332,47 +476,138 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
         return true;
     };
 
+    const renderInlineField = (title: string, field: string, currentValue: string, isTextarea = false) => {
+        const isEditing = inlineEdit?.field === field;
+        return (
+            <div
+                className="group/field relative border border-transparent hover:border-border rounded-lg p-2 -mx-2 transition-colors"
+                onMouseEnter={() => setHoveredNodeId(`inline-${field}`)}
+                onMouseLeave={() => setHoveredNodeId(null)}
+            >
+                <div className="flex justify-between items-start mb-1">
+                    <span className="font-semibold text-muted-foreground uppercase text-xs tracking-wider">{title}</span>
+                    {!isEditing && hoveredNodeId === `inline-${field}` && (
+                        <Button variant="ghost" size="icon" className="h-6 w-6 absolute right-2 top-2 text-blue-600 hover:bg-blue-100" onClick={() => setInlineEdit({ field, value: currentValue })}>
+                            <Edit2 size={12} />
+                        </Button>
+                    )}
+                </div>
+                {isEditing ? (
+                    <div className="space-y-2 mt-2">
+                        {isTextarea ? (
+                            <textarea className="w-full bg-white dark:bg-zinc-900 border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-primary min-h-[80px]" value={inlineEdit.value} onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })} autoFocus />
+                        ) : (
+                            <input className="w-full bg-white dark:bg-zinc-900 border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-primary" value={inlineEdit.value} onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })} autoFocus />
+                        )}
+                        <div className="flex justify-end gap-2">
+                            <Button variant="outline" size="sm" onClick={() => setInlineEdit(null)}>Cancel</Button>
+                            <Button size="sm" onClick={saveInlineEdit}>Save</Button>
+                        </div>
+                    </div>
+                ) : (
+                    <p className="mt-1 text-sm">{currentValue}</p>
+                )}
+            </div>
+        );
+    };
+
     const renderStandardNode = (node: any, currentDepth: number) => {
         const active = isNodeActive(node.id);
         const children = graph.nodes.components.filter((c: any) => c.parent === node.id);
         const incomingNavs = graph.edges?.navigation?.filter((n: any) => n.toScreenId === node.id || n.toComponentId === node.id) || [];
         const outgoingNavs = graph.edges?.navigation?.filter((n: any) => n.fromComponentId === node.id) || [];
 
-        if (currentDepth > zoomLevel) return null;
-        const isScreen = currentDepth === 0;
+        const isScreen = node.parent === 'body';
+        const hasChildren = children.length > 0;
+        const isExpanded = expandedNodes.has(node.id);
+
+        const toggleExpand = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            if (!hasChildren) return;
+            setExpandedNodes(prev => {
+                const next = new Set(prev);
+                if (next.has(node.id)) next.delete(node.id);
+                else next.add(node.id);
+                return next;
+            });
+        };
 
         return (
-            <div 
-                key={node.id} 
-                onClick={(e) => { e.stopPropagation(); setSelectedNode({ type: isScreen ? 'Screen' : 'Component', ...node }); }}
+            <div
+                key={node.id}
                 className={`
-                    border transition-all duration-300 cursor-pointer shadow-sm
+                    border transition-all duration-300 shadow-sm relative
+                    ${hasChildren ? 'hover:border-primary/50' : 'cursor-default'}
                     ${isScreen ? 'w-80 rounded-xl bg-white dark:bg-zinc-900' : 'w-full p-2 rounded-md bg-slate-50 dark:bg-zinc-800/80 mt-2'}
-                    ${active ? 'opacity-100 scale-100' : 'opacity-30 scale-95 grayscale'}
-                    ${selectedNode?.id === node.id ? 'ring-2 ring-primary border-primary' : 'border-border hover:border-primary/50'}
+                    opacity-100 scale-100
+                    ${selectedNode?.id === node.id ? 'ring-2 ring-primary border-primary' : 'border-border'}
                 `}
             >
-                <div className={`font-semibold flex justify-between items-center ${isScreen ? 'p-3 border-b bg-muted/30 text-sm rounded-t-xl' : 'text-xs'}`}>
-                    {node.name}
+                {/* Node Header (CSS Hover Triggers) */}
+                <div className={`group/header relative font-semibold flex justify-between items-center ${isScreen ? 'p-3 border-b bg-muted/30 text-sm rounded-t-xl' : 'p-2 text-xs hover:bg-muted/30 rounded-t-md'}`}>
+                    <div className="flex items-center gap-1">
+                        {hasChildren && (
+                            <div onClick={toggleExpand} className="cursor-pointer p-1 hover:bg-black/5 dark:hover:bg-white/10 rounded">
+                                {isExpanded ? <ChevronDown size={14} className="text-muted-foreground" /> : <ChevronRight size={14} className="text-muted-foreground" />}
+                            </div>
+                        )}
+                        {node.name}
+                    </div>
+
+                    {/* Hover Tools - Hidden in Flows or Functionality modes */}
+                    {!(mode === 'flows' && activeFlow) && !(showFunctionality && activeFunction) && (
+                        <div className="opacity-0 group-hover/header:opacity-100 transition-opacity flex items-center gap-1 bg-white dark:bg-zinc-900 p-1 rounded absolute right-2 z-10 shadow-sm border border-border/50">
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-600 hover:text-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900" onClick={(e) => { e.stopPropagation(); setSelectedNode({ type: 'NewNode', isScreen: false, parent: node.id, name: '', purpose: '', styles: '', connectedTo: '' }); setExpandedNodes(prev => new Set([...prev, node.id])); }}>
+                                        <Plus size={12} />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top">Add Component</TooltipContent>
+                            </Tooltip>
+
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-600 hover:text-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900" onClick={(e) => { e.stopPropagation(); setSelectedNode({ type: isScreen ? 'Screen' : 'Component', ...node }); }}>
+                                <Edit2 size={12} />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-red-600 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900" onClick={(e) => { e.stopPropagation(); setNodeToDelete(node); }}>
+                                <Trash2 size={12} />
+                            </Button>
+                        </div>
+                    )}
                 </div>
+
                 <div className="px-3 py-1 space-y-1 mt-1">
-                    {showNav && incomingNavs.length > 0 && incomingNavs.map((n:any, i:number) => (
+                    {showNav && incomingNavs.length > 0 && incomingNavs.map((n: any, i: number) => (
                         <div key={i} className="text-[10px] text-blue-600 font-medium">← Comes from {getNodeById(n.fromComponentId)?.name || 'Unknown'}</div>
                     ))}
-                    {showNav && outgoingNavs.length > 0 && outgoingNavs.map((n:any, i:number) => (
+                    {showNav && outgoingNavs.length > 0 && outgoingNavs.map((n: any, i: number) => (
                         <div key={i} className="text-[10px] text-emerald-600 font-medium">→ Goes to {getNodeById(n.toScreenId)?.name || 'Unknown'}</div>
                     ))}
                     {showStyles && node.styles && (
                         <div className="text-[10px] text-amber-600 dark:text-amber-500 font-medium font-mono truncate">Styles: {node.styles}</div>
                     )}
                 </div>
-                {children.length > 0 && currentDepth < zoomLevel && (
-                    <div className={`${isScreen ? 'p-3' : 'pl-2 border-l border-dashed border-border/60 ml-1'} flex flex-col`}>
-                        {children.map((child: any) => renderStandardNode(child, currentDepth + 1))}
+
+                {isExpanded && hasChildren && (
+                    <div className={`${isScreen ? 'p-3' : 'pl-2 border-l border-dashed border-border/60 ml-1'} flex flex-col`} onClick={e => e.stopPropagation()}>
+                        {children
+                            .filter((child: any) => {
+                                // If functionality is active, only render children that are part of it
+                                if (showFunctionality && activeFunction) {
+                                    return isNodeActive(child.id);
+                                }
+                                return true;
+                            })
+                            .map((child: any) => renderStandardNode(child, currentDepth + 1))
+                        }
                     </div>
                 )}
-                {children.length > 0 && currentDepth === zoomLevel && (
-                    <div className="text-[10px] text-center text-muted-foreground mt-2 py-1 bg-muted/20 rounded">
+
+                {!isExpanded && hasChildren && (
+                    <div
+                        onClick={toggleExpand}
+                        className="text-[10px] text-center text-muted-foreground mt-2 py-1 bg-muted/20 hover:bg-muted/40 cursor-pointer rounded mx-2 mb-2 transition-colors"
+                    >
                         +{children.length} nested component(s)...
                     </div>
                 )}
@@ -384,7 +619,6 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
         const flow = graph.edges?.flows?.find((f: any) => f.name === activeFlow);
         if (!flow || !flow.steps) return <div className="text-muted-foreground m-auto">Select a flow to view sequence.</div>;
 
-        // Chunk the steps into rows based on screen width
         const rows = [];
         for (let i = 0; i < flow.steps.length; i += itemsPerRow) {
             rows.push(flow.steps.slice(i, i + itemsPerRow));
@@ -399,37 +633,47 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
 
                         return (
                             <React.Fragment key={`row-${rowIndex}`}>
-                                {/* The Row (Alternating Direction) */}
                                 <div className={`flex w-full ${isEven ? 'flex-row' : 'flex-row-reverse'} justify-start`}>
                                     {rowSteps.map((stepId: string, colIndex: number) => {
                                         const node = getNodeById(stepId);
                                         if (!node) return null;
-                                        
+
                                         const isLastInRow = colIndex === rowSteps.length - 1;
                                         const incomingNavs = showNav ? (graph.edges?.navigation?.filter((n: any) => n.toScreenId === node.id || n.toComponentId === node.id) || []) : [];
                                         const outgoingNavs = showNav ? (graph.edges?.navigation?.filter((n: any) => n.fromComponentId === node.id) || []) : [];
 
                                         return (
                                             <React.Fragment key={`${stepId}-${colIndex}`}>
-                                                <div 
-                                                    onClick={(e) => { e.stopPropagation(); setSelectedNode({ type: node.isScreen ? 'Screen' : 'Component', ...node }); }}
-                                                    className={`flex-shrink-0 w-64 border rounded-xl bg-white dark:bg-zinc-900 shadow-md cursor-pointer transition-all ${selectedNode?.id === node.id ? 'ring-2 ring-primary border-primary scale-105' : 'border-border hover:border-primary/50'}`}
+                                                <div
+                                                    onMouseEnter={(e) => { e.stopPropagation(); setHoveredNodeId(node.id); }}
+                                                    onMouseLeave={(e) => { e.stopPropagation(); setHoveredNodeId(null); }}
+                                                    className={`relative flex-shrink-0 w-64 border rounded-xl bg-white dark:bg-zinc-900 shadow-md transition-all ${selectedNode?.id === node.id ? 'ring-2 ring-primary border-primary scale-105' : 'border-border'}`}
                                                 >
                                                     <div className={`px-3 py-2 border-b font-semibold text-sm rounded-t-xl flex justify-between items-center ${node.isScreen ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300' : 'bg-muted/30'}`}>
                                                         {node.name}
                                                         <span className="text-[10px] uppercase font-bold opacity-50">{node.isScreen ? 'Screen' : 'Component'}</span>
+
+                                                        {hoveredNodeId === node.id && !activeFlow && (
+                                                            <div className="flex items-center gap-1 bg-white/80 dark:bg-zinc-900/80 p-1 rounded absolute right-2 z-10">
+                                                                <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-600 hover:text-blue-700 hover:bg-blue-100" onClick={(e) => { e.stopPropagation(); setSelectedNode({ type: node.isScreen ? 'Screen' : 'Component', ...node }); }}>
+                                                                    <Edit2 size={12} />
+                                                                </Button>
+                                                                <Button variant="ghost" size="icon" className="h-6 w-6 text-red-600 hover:text-red-700 hover:bg-red-100" onClick={(e) => { e.stopPropagation(); setNodeToDelete(node); }}>
+                                                                    <Trash2 size={12} />
+                                                                </Button>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                     <div className="p-3 text-xs text-muted-foreground min-h-[60px]">{node.purpose}</div>
                                                     {(showNav || showStyles) && (
                                                         <div className="px-3 pb-3 pt-1 space-y-1 border-t border-dashed bg-slate-50 dark:bg-zinc-800/50 rounded-b-xl">
-                                                            {showNav && incomingNavs.length > 0 && incomingNavs.map((n:any, i:number) => <div key={i} className="text-[10px] text-blue-600 font-medium truncate">← {getNodeById(n.fromComponentId)?.name || 'Unknown'}</div>)}
-                                                            {showNav && outgoingNavs.length > 0 && outgoingNavs.map((n:any, i:number) => <div key={i} className="text-[10px] text-emerald-600 font-medium truncate">→ {getNodeById(n.toScreenId)?.name || 'Unknown'}</div>)}
+                                                            {showNav && incomingNavs.length > 0 && incomingNavs.map((n: any, i: number) => <div key={i} className="text-[10px] text-blue-600 font-medium truncate">← {getNodeById(n.fromComponentId)?.name || 'Unknown'}</div>)}
+                                                            {showNav && outgoingNavs.length > 0 && outgoingNavs.map((n: any, i: number) => <div key={i} className="text-[10px] text-emerald-600 font-medium truncate">→ {getNodeById(n.toScreenId)?.name || 'Unknown'}</div>)}
                                                             {showStyles && node.styles && <div className="text-[10px] text-amber-600 dark:text-amber-500 font-medium font-mono truncate mt-1">Sty: {node.styles}</div>}
                                                         </div>
                                                     )}
                                                 </div>
 
-                                                {/* Horizontal Arrow (Right for Even, Left for Odd) */}
                                                 {!isLastInRow && (
                                                     <div className="flex-shrink-0 text-muted-foreground flex items-center justify-center w-16">
                                                         <div className="h-px flex-1 bg-border"></div>
@@ -442,7 +686,6 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                     })}
                                 </div>
 
-                                {/* Vertical Connector between rows */}
                                 {!isLastRow && (
                                     <div className={`w-full flex ${isEven ? 'justify-end' : 'justify-start'}`}>
                                         <div className="flex flex-col items-center w-64">
@@ -462,46 +705,102 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
 
     return (
         <div className="flex flex-col h-full bg-slate-50 dark:bg-zinc-950 relative overflow-hidden">
-            
+
+            {/* Modal for Deletion Confirmation */}
+            {nodeToDelete && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-zinc-900 p-6 rounded-xl shadow-xl max-w-sm w-full border">
+                        <h3 className="text-lg font-bold mb-2">Delete {nodeToDelete.isScreen ? 'Screen' : 'Component'}?</h3>
+                        <p className="text-sm text-muted-foreground mb-6">Are you sure you want to delete "{nodeToDelete.name}"? This will also delete any nested components inside it.</p>
+                        <div className="flex justify-end gap-3">
+                            <Button variant="outline" onClick={() => setNodeToDelete(null)}>Cancel</Button>
+                            <Button variant="destructive" onClick={handleDeleteNode}>Delete</Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* 1. Mode Switcher (TOP BAR) */}
-            <div className="flex items-center justify-center p-3 border-b bg-white dark:bg-zinc-900 z-10 gap-2">
-                <Button variant={mode === 'project' ? 'default' : 'outline'} size="sm" onClick={() => setMode('project')}><Briefcase className="w-4 h-4 mr-2" /> Project</Button>
-                <Button variant={mode === 'structure' ? 'default' : 'outline'} size="sm" onClick={() => setMode('structure')}><Layout className="w-4 h-4 mr-2" /> Screen</Button>
-                <Button variant={mode === 'flows' ? 'default' : 'outline'} size="sm" onClick={() => setMode('flows')}><MousePointerClick className="w-4 h-4 mr-2" /> Flows</Button>
+            <div className="flex items-center justify-between px-4 py-2 border-b bg-white dark:bg-zinc-900 z-10 min-h-[56px]">
+                {/* Left Side: Mode Buttons */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                    <Button variant={mode === 'project' ? 'default' : 'outline'} size="sm" onClick={() => setMode('project')}>
+                        <Briefcase className="w-4 h-4 mr-2" /> Project
+                    </Button>
+                    <Button variant={mode === 'structure' ? 'default' : 'outline'} size="sm" onClick={() => setMode('structure')}>
+                        <Layout className="w-4 h-4 mr-2" /> Screen
+                    </Button>
+                    <Button variant={mode === 'flows' ? 'default' : 'outline'} size="sm" onClick={() => setMode('flows')}>
+                        <MousePointerClick className="w-4 h-4 mr-2" /> Flows
+                    </Button>
+                </div>
+
+                {/* Right Side: View Controls (Unified Row with Truncation) */}
+                {mode !== 'project' && (
+                    <div className="flex items-center gap-4 animate-in fade-in duration-200 overflow-hidden ml-4">
+                        {/* Dropdowns Group with Truncation Logic */}
+                        <div className="flex items-center gap-2 min-w-0">
+                            {mode === 'flows' && (
+                                <select
+                                    className="bg-muted/50 border border-border rounded-md px-2 py-1 text-xs outline-none font-medium w-full max-w-[350px] truncate"
+                                    value={activeFlow || ""}
+                                    onChange={(e) => setActiveFlow(e.target.value)}
+                                >
+                                    {graph.edges?.flows?.map((f: any) => (
+                                        <option key={f.name} value={f.name}>
+                                            {f.name.length > 50 ? `${f.name.substring(0, 45)}...` : f.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
+                            {mode === 'structure' && showFunctionality && (
+                                <select
+                                    className="bg-muted/50 border border-border rounded-md px-2 py-1 text-xs outline-none font-medium w-full max-w-[350px] truncate"
+                                    value={activeFunction || ""}
+                                    onChange={(e) => setActiveFunction(e.target.value)}
+                                >
+                                    {graph.metadata?.functionalities?.map((f: any) => (
+                                        <option key={f.name} value={f.name}>
+                                            {f.name.length > 50 ? `${f.name.substring(0, 45)}...` : f.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
+                        </div>
+                        {/* Checkboxes Group - Used shorter labels to save space */}
+                        <div className="flex items-center gap-3 text-[11px] font-medium text-muted-foreground border-r pr-4 h-6 flex-shrink-0">
+                            <label className="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors">
+                                <input type="checkbox" checked={showNav} onChange={(e) => setShowNav(e.target.checked)} className="rounded text-primary focus:ring-primary h-3.5 w-3.5" /> Nav
+                            </label>
+                            <label className="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors">
+                                <input type="checkbox" checked={showStyles} onChange={(e) => setShowStyles(e.target.checked)} className="rounded text-primary focus:ring-primary h-3.5 w-3.5" /> Styles
+                            </label>
+                            {mode === 'structure' && (
+                                <label className="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors">
+                                    <input type="checkbox" checked={showFunctionality} onChange={(e) => handleToggleFunctionality(e.target.checked)} className="rounded text-primary focus:ring-primary h-3.5 w-3.5" /> Functionality
+                                </label>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Main Layout Area */}
             <div className="flex flex-1 overflow-hidden">
-                
+
                 {/* 2. Main Canvas */}
                 <div className="flex-1 overflow-auto p-8 relative flex flex-col">
-                    
-                    {/* Project Mode Rendering */}
+
                     {mode === 'project' && (
                         <div className="max-w-4xl mx-auto w-full space-y-8 pb-20">
-                            {/* Project Strategy & Scope Card */}
-                            <div 
-                                className={`p-6 border rounded-xl bg-white dark:bg-zinc-900 shadow-sm cursor-pointer transition-all ${selectedNode?.type === 'Project' ? 'ring-2 ring-primary border-primary' : 'hover:border-primary/50 border-border'}`}
-                                onClick={() => setSelectedNode({
-                                    type: 'Project',
-                                    description: graph.strategy?.productDescription || '',
-                                    objectiveUsers: graph.strategy?.objectives?.forUsers || '',
-                                    objectiveCreator: graph.strategy?.objectives?.forCreator || '',
-                                    outOfScope: graph.scope?.outOfScope?.join('\n') || ''
-                                })}
-                            >
-                                <h2 className="text-xl font-bold mb-5 flex items-center"><Briefcase className="mr-2 w-5 h-5 text-primary" /> Strategy & Scope</h2>
+                            {/* Project Strategy Card (Inline Editable) */}
+                            <div className="p-6 border rounded-xl bg-white dark:bg-zinc-900 shadow-sm border-border">
+                                <h2 className="text-xl font-bold mb-5 flex items-center"><Briefcase className="mr-2 w-5 h-5 text-primary" /> Strategy & Objectives</h2>
                                 <div className="space-y-4 text-sm leading-relaxed">
-                                    <div><span className="font-semibold text-muted-foreground uppercase text-xs tracking-wider">Product Description</span> <p className="mt-1">{graph.strategy?.productDescription}</p></div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div className="p-3 bg-muted/30 rounded-lg border border-border/50"><span className="font-semibold text-muted-foreground uppercase text-xs tracking-wider">Objective (Users)</span> <p className="mt-1">{graph.strategy?.objectives?.forUsers}</p></div>
-                                        <div className="p-3 bg-muted/30 rounded-lg border border-border/50"><span className="font-semibold text-muted-foreground uppercase text-xs tracking-wider">Objective (Creator)</span> <p className="mt-1">{graph.strategy?.objectives?.forCreator}</p></div>
-                                    </div>
-                                    <div>
-                                        <span className="font-semibold text-muted-foreground uppercase text-xs tracking-wider">Out of Scope Constraints</span>
-                                        <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
-                                            {graph.scope?.outOfScope?.map((item:string, i:number) => <li key={i}>{item}</li>)}
-                                        </ul>
+                                    {renderInlineField("Product Description", "description", graph.strategy?.productDescription || '', true)}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-4">
+                                        {renderInlineField("Objective (Users)", "objectiveUsers", graph.strategy?.objectives?.forUsers || '', true)}
+                                        {renderInlineField("Objective (Creator)", "objectiveCreator", graph.strategy?.objectives?.forCreator || '', true)}
                                     </div>
                                 </div>
                             </div>
@@ -510,16 +809,25 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                             <div>
                                 <div className="flex items-center justify-between mb-4">
                                     <h2 className="text-xl font-bold">Target Personas</h2>
-                                    <Button variant="outline" size="sm" onClick={handleAddPersona}>+ Add Persona</Button>
+                                    <Button variant="outline" size="sm" onClick={() => openPersonaEditor()}>+ Add Persona</Button>
                                 </div>
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                                     {graph.strategy?.personas?.map((p: any, i: number) => (
                                         <div
                                             key={i}
-                                            onClick={() => setSelectedNode({ type: 'Persona', index: i, ...p })}
-                                            className={`p-5 border rounded-xl bg-white dark:bg-zinc-900 shadow-sm cursor-pointer transition-all ${selectedNode?.type === 'Persona' && selectedNode?.index === i ? 'ring-2 ring-primary border-primary' : 'hover:border-primary/50 border-border'}`}
+                                            onMouseEnter={() => setHoveredNodeId(`persona-${i}`)}
+                                            onMouseLeave={() => setHoveredNodeId(null)}
+                                            className={`p-5 border rounded-xl bg-white dark:bg-zinc-900 shadow-sm transition-all relative ${selectedNode?.type === 'PersonaForm' && personaDraft?.index === i ? 'ring-2 ring-primary border-primary' : 'border-border hover:border-primary/50'}`}
                                         >
-                                            <h3 className="font-bold text-lg mb-3 text-primary">{p.name}</h3>
+                                            <div className="flex justify-between items-start mb-3">
+                                                <h3 className="font-bold text-lg text-primary">{p.name}</h3>
+                                                {hoveredNodeId === `persona-${i}` && (
+                                                    <div className="flex gap-1 absolute right-3 top-3 bg-white/90 p-1 rounded">
+                                                        <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-600 hover:bg-blue-100" onClick={(e) => { e.stopPropagation(); openPersonaEditor(p, i); }}><Edit2 size={12} /></Button>
+                                                        <Button variant="ghost" size="icon" className="h-6 w-6 text-red-600 hover:bg-red-100" onClick={(e) => { e.stopPropagation(); deletePersona(i); }}><Trash2 size={12} /></Button>
+                                                    </div>
+                                                )}
+                                            </div>
                                             <div className="text-sm space-y-3">
                                                 <div><span className="font-semibold text-xs uppercase text-muted-foreground">Demographics</span><p>{p.demographics}</p></div>
                                                 <div><span className="font-semibold text-xs uppercase text-muted-foreground">Technical Profile</span><p>{p.technicalProfile}</p></div>
@@ -529,46 +837,50 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                     ))}
                                 </div>
                             </div>
-                        </div>
-                    )}
 
-                    {/* View Controls & Dropdowns (Only in Structure and Flows) */}
-                    {mode !== 'project' && (
-                        <div className="mb-8 flex items-center justify-between bg-white dark:bg-zinc-900 p-3 rounded-lg border shadow-sm">
-                            <div className="flex items-center gap-6">
-                                {mode === 'structure' && (
-                                    <div className="flex items-center gap-2 bg-muted p-1 rounded-md">
-                                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setZoomLevel(z => Math.max(0, z - 1))} disabled={zoomLevel === 0}>-</Button>
-                                        <span className="text-xs font-semibold px-2">Zoom Level {zoomLevel}</span>
-                                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setZoomLevel(z => Math.min(3, z + 1))} disabled={zoomLevel === 3}>+</Button>
-                                    </div>
-                                )}
-                                <div className="flex items-center gap-4 text-sm font-medium">
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <input type="checkbox" checked={showNav} onChange={(e) => setShowNav(e.target.checked)} className="rounded text-primary focus:ring-primary" /> Show Navigation
-                                    </label>
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <input type="checkbox" checked={showStyles} onChange={(e) => setShowStyles(e.target.checked)} className="rounded text-primary focus:ring-primary" /> Show Styles
-                                    </label>
-                                    {mode === 'structure' && (
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                            <input type="checkbox" checked={showFunctionality} onChange={(e) => handleToggleFunctionality(e.target.checked)} className="rounded text-primary focus:ring-primary" /> Show Functionality
-                                        </label>
+                            {/* Out of Scope Constraints Card */}
+                            <div className="p-6 border rounded-xl bg-white dark:bg-zinc-900 shadow-sm border-border">
+                                <h2 className="text-xl font-bold mb-5 flex items-center">Out of Scope Constraints</h2>
+                                <div className="space-y-2">
+                                    {graph.scope?.outOfScope?.map((item: string, i: number) => {
+                                        const isEditing = inlineEdit?.field === 'constraint' && inlineEdit.index === i;
+                                        return isEditing ? (
+                                            <div key={item} className="p-3 border rounded-lg bg-slate-50 dark:bg-zinc-800 space-y-2">
+                                                <textarea className="w-full bg-white dark:bg-zinc-900 border rounded text-sm p-2 focus:ring-2 focus:ring-primary" value={inlineEdit.value} onChange={e => setInlineEdit({ ...inlineEdit, value: e.target.value })} autoFocus />
+                                                <div className="flex justify-end gap-2">
+                                                    <Button size="sm" variant="outline" onClick={() => setInlineEdit(null)}>Cancel</Button>
+                                                    <Button size="sm" onClick={saveInlineEdit}>Save</Button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div
+                                                key={item}
+                                                onMouseEnter={() => setHoveredNodeId(`constraint-${i}`)}
+                                                onMouseLeave={() => setHoveredNodeId(null)}
+                                                className="flex justify-between items-start p-3 border rounded-lg bg-white dark:bg-zinc-900 shadow-sm hover:border-primary/50 transition-all relative"
+                                            >
+                                                <p className="text-sm pr-16">{item}</p>
+                                                {hoveredNodeId === `constraint-${i}` && (
+                                                    <div className="flex gap-1 absolute right-2 top-2 bg-white p-1 rounded">
+                                                        <Button size="icon" variant="ghost" className="h-6 w-6 text-blue-600 hover:bg-blue-100" onClick={() => setInlineEdit({ field: 'constraint', value: item, index: i })}><Edit2 size={12} /></Button>
+                                                        <Button size="icon" variant="ghost" className="h-6 w-6 text-red-600 hover:bg-red-100" onClick={() => deleteConstraint(i)}><Trash2 size={12} /></Button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                    {inlineEdit?.field === 'constraint' && inlineEdit.index === undefined ? (
+                                        <div className="p-3 border rounded-lg bg-slate-50 dark:bg-zinc-800 space-y-2 mt-4">
+                                            <textarea className="w-full bg-white dark:bg-zinc-900 border rounded text-sm p-2 focus:ring-2 focus:ring-primary" placeholder="New constraint..." value={inlineEdit.value} onChange={e => setInlineEdit({ ...inlineEdit, value: e.target.value })} autoFocus />
+                                            <div className="flex justify-end gap-2">
+                                                <Button size="sm" variant="outline" onClick={() => setInlineEdit(null)}>Cancel</Button>
+                                                <Button size="sm" onClick={saveInlineEdit}>Add</Button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <Button variant="outline" size="sm" className="mt-4 w-full border-dashed" onClick={() => setInlineEdit({ field: 'constraint', value: '' })}>+ Add Constraint</Button>
                                     )}
                                 </div>
-                            </div>
-
-                            <div className="flex items-center gap-3">
-                                {mode === 'flows' && (
-                                    <select className="bg-muted border border-border rounded-md px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary font-medium" value={activeFlow || ""} onChange={(e) => setActiveFlow(e.target.value)}>
-                                        {graph.edges?.flows?.map((f: any) => <option key={f.name} value={f.name}>{f.name}</option>)}
-                                    </select>
-                                )}
-                                {mode === 'structure' && showFunctionality && (
-                                    <select className="bg-muted border border-border rounded-md px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary font-medium" value={activeFunction || ""} onChange={(e) => setActiveFunction(e.target.value)}>
-                                        {graph.metadata?.functionalities?.map((f: any) => <option key={f.name} value={f.name}>{f.name}</option>)}
-                                    </select>
-                                )}
                             </div>
                         </div>
                     )}
@@ -576,64 +888,192 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                     {/* Structure / Flows Rendering */}
                     {mode === 'flows' && (
                         <div className="w-full flex-1 border-2 border-dashed border-border/60 rounded-xl bg-white/50 dark:bg-zinc-900/50 flex overflow-hidden">
-                             {renderFlowSequence()}
+                            {renderFlowSequence()}
                         </div>
                     )}
                     {mode === 'structure' && (
-                        <div className="flex flex-wrap gap-8 items-start pb-20">
-                            {graph.nodes?.screens?.filter((s:any) => s.parent === 'body').map((screen: any) => renderStandardNode(screen, 0))}
+                        <div className="flex flex-wrap gap-8 items-start pb-20 justify-center">
+                            {graph.nodes?.screens?.filter((s: any) => {
+                                // Only show top-level screens (parent === 'body')
+                                if (s.parent !== 'body') return false;
+
+                                // If functionality view is ON, only show screens that are "active"
+                                if (showFunctionality && activeFunction) {
+                                    return isNodeActive(s.id);
+                                }
+
+                                // Otherwise show all top-level screens
+                                return true;
+                            }).map((screen: any) => renderStandardNode(screen, 0))}
+
+                            {/* Hide 'Add Screen' button when focusing on a specific functionality to keep the view clean */}
+                            {(!showFunctionality || !activeFunction) && (
+                                <div
+                                    onClick={() => setSelectedNode({ type: 'NewNode', isScreen: true, parent: 'body', name: '', purpose: '', styles: '', connectedTo: '' })}
+                                    className="w-80 border-2 border-dashed border-border hover:border-primary/50 rounded-xl flex items-center justify-center p-6 cursor-pointer text-muted-foreground hover:text-primary transition-colors min-h-[150px]"
+                                >
+                                    + Add Screen
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
+
+                {/* Floating Zoom Controls (Global/Local Map-style) */}
+                {mode === 'structure' && (
+                    <div className="absolute bottom-8 right-8 flex flex-col gap-2 z-10 bg-white dark:bg-zinc-900 p-2 rounded-xl shadow-lg border">
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" disabled={!canZoomIn} onClick={handleZoomIn}>
+                                    <ZoomInIcon className="w-5 h-5" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="left">Expand Next Level</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" disabled={!canZoomOut} onClick={handleZoomOut}>
+                                    <ZoomOutIcon className="w-5 h-5" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="left">Collapse Deepest Level</TooltipContent>
+                        </Tooltip>
+                    </div>
+                )}
 
                 {/* 4. Editable Context Panel (Sidebar) */}
                 {selectedNode && (
                     <div className="w-96 border-l bg-white dark:bg-zinc-900 shadow-2xl p-5 flex flex-col z-20 overflow-y-auto animate-in slide-in-from-right-8 border-t-0 border-r-0 border-b-0">
                         <div className="flex justify-between items-center mb-6 pb-4 border-b">
-                            <span className="text-xs font-bold uppercase tracking-wider text-primary">{selectedNode.type} Settings</span>
+                            <span className="text-xs font-bold uppercase tracking-wider text-primary">
+                                {selectedNode.type === 'PersonaForm' ? (personaDraft?.isNew ? 'Add Persona' : 'Edit Persona') : `${selectedNode.type} Settings`}
+                            </span>
                             <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setSelectedNode(null)}>✕</Button>
                         </div>
-                        
+
                         <div className="space-y-4">
-                            {/* Editor fields for Screens & Components */}
+                            {/* Editor fields for Existing Screens & Components */}
                             {(selectedNode.type === 'Screen' || selectedNode.type === 'Component') && (
                                 <>
                                     <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Name</label><input className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.name} onChange={(e) => handleUpdateNode('name', e.target.value)} /></div>
                                     <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Purpose</label><textarea className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary min-h-[80px]" value={selectedNode.purpose} onChange={(e) => handleUpdateNode('purpose', e.target.value)} /></div>
                                     <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Styles (Specific or Inherited)</label><input className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary font-mono text-xs" value={selectedNode.styles || "Inherited from Global"} onChange={(e) => handleUpdateNode('styles', e.target.value)} /></div>
-                                    {mode !== 'flows' && mode !== 'project' && (
-                                        <div className="pt-4 border-t"><Button className="w-full" variant="secondary" onClick={handleAddChild}>+ Add Nested Component</Button></div>
-                                    )}
+                                    <div className="pt-4 border-t flex justify-end gap-2">
+                                        <Button variant="outline" size="sm" onClick={() => setSelectedNode(null)}>Cancel</Button>
+                                        <Button size="sm" onClick={() => setSelectedNode(null)}>Save</Button>
+                                    </div>
                                 </>
                             )}
 
-                            {/* Editor fields for Project Strategy */}
-                            {selectedNode.type === 'Project' && (
+                            {/* Editor fields for CREATING a New Node */}
+                            {selectedNode.type === 'NewNode' && (
                                 <>
-                                    <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Product Description</label><textarea className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary min-h-[80px]" value={selectedNode.description} onChange={(e) => handleUpdateNode('description', e.target.value)} /></div>
-                                    <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Objective: For Users</label><textarea className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary min-h-[60px]" value={selectedNode.objectiveUsers} onChange={(e) => handleUpdateNode('objectiveUsers', e.target.value)} /></div>
-                                    <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Objective: For Creator</label><textarea className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary min-h-[60px]" value={selectedNode.objectiveCreator} onChange={(e) => handleUpdateNode('objectiveCreator', e.target.value)} /></div>
-                                    <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Out of Scope (one per line)</label><textarea className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary min-h-[120px]" value={selectedNode.outOfScope} onChange={(e) => handleUpdateNode('outOfScope', e.target.value)} /></div>
+                                    <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Name</label><input className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.name} onChange={(e) => setSelectedNode({ ...selectedNode, name: e.target.value })} autoFocus /></div>
+                                    <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Purpose</label><textarea className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary min-h-[80px]" value={selectedNode.purpose} onChange={(e) => setSelectedNode({ ...selectedNode, purpose: e.target.value })} /></div>
+                                    <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Styles</label><input className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary font-mono text-xs" value={selectedNode.styles} placeholder="Inherited from Global" onChange={(e) => setSelectedNode({ ...selectedNode, styles: e.target.value })} /></div>
+                                    <div>
+                                        <label className="text-xs font-semibold text-muted-foreground mb-1 block">Connected to Node (Navigation)</label>
+                                        <select className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.connectedTo} onChange={(e) => setSelectedNode({ ...selectedNode, connectedTo: e.target.value })}>
+                                            <option value="">None</option>
+                                            {[...(graph.nodes?.screens || []), ...(graph.nodes?.components || [])].map(n => (
+                                                <option key={n.id} value={n.id}>{n.name} ({n.id.startsWith('screen') ? 'Screen' : 'Component'})</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="pt-4 border-t flex justify-end gap-2">
+                                        <Button variant="outline" size="sm" onClick={() => setSelectedNode(null)}>Cancel</Button>
+                                        <Button size="sm" onClick={() => {
+                                            if (!selectedNode.name) return;
+                                            setGraph((prev: any) => {
+                                                const next = JSON.parse(JSON.stringify(prev));
+                                                const newId = selectedNode.isScreen ? `screen-new-${Date.now()}` : `comp-new-${Date.now()}`;
+                                                const newNode = { id: newId, parent: selectedNode.parent, name: selectedNode.name, purpose: selectedNode.purpose, styles: selectedNode.styles || "Inherited from Global" };
+
+                                                if (selectedNode.isScreen) next.nodes.screens.push(newNode);
+                                                else next.nodes.components.push(newNode);
+
+                                                if (selectedNode.connectedTo) {
+                                                    if (!next.edges.navigation) next.edges.navigation = [];
+                                                    next.edges.navigation.push({ fromComponentId: newId, toScreenId: selectedNode.connectedTo });
+                                                }
+                                                return next;
+                                            });
+                                            setSelectedNode(null);
+                                        }}>Done</Button>
+                                    </div>
                                 </>
                             )}
 
-                            {/* Editor fields for Personas */}
-                            {selectedNode.type === 'Persona' && (
+                            {/* Detailed Editor fields for Personas */}
+                            {selectedNode.type === 'PersonaForm' && personaDraft && (
                                 <>
-                                    <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Persona Name / Role</label><input className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary font-bold text-primary" value={selectedNode.name} onChange={(e) => handleUpdateNode('name', e.target.value)} /></div>
-                                    <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Demographics (Gender, Age, Income, etc.)</label><textarea className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary min-h-[60px]" value={selectedNode.demographics} onChange={(e) => handleUpdateNode('demographics', e.target.value)} /></div>
-                                    <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Technical Profile</label><textarea className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary min-h-[60px]" value={selectedNode.technicalProfile} onChange={(e) => handleUpdateNode('technicalProfile', e.target.value)} /></div>
-                                    <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Knowledge Profile</label><textarea className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary min-h-[80px]" value={selectedNode.knowledgeProfile} onChange={(e) => handleUpdateNode('knowledgeProfile', e.target.value)} /></div>
+                                    <div><label className="text-xs font-semibold text-muted-foreground block mb-1">Name / Role</label><input className="w-full border bg-slate-50 dark:bg-zinc-800 rounded p-2 text-sm focus:ring-1 focus:ring-primary" value={personaDraft.name} onChange={e => setPersonaDraft({ ...personaDraft, name: e.target.value })} /></div>
+
+                                    <h4 className="font-semibold text-sm pt-4 border-t mt-4 mb-2 text-primary">Demographics</h4>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Gender</label>
+                                            <select className="w-full border bg-slate-50 dark:bg-zinc-800 rounded p-2 text-sm focus:ring-1 focus:ring-primary" value={personaDraft.gender} onChange={e => setPersonaDraft({ ...personaDraft, gender: e.target.value })}>
+                                                <option value="">Select...</option><option value="Female">Female</option><option value="Male">Male</option><option value="Non-binary">Non-binary</option><option value="Other">Other</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Age</label>
+                                            <select className="w-full border bg-slate-50 dark:bg-zinc-800 rounded p-2 text-sm focus:ring-1 focus:ring-primary" value={personaDraft.age} onChange={e => setPersonaDraft({ ...personaDraft, age: e.target.value })}>
+                                                <option value="">Select...</option><option value="Under 18">Under 18</option><option value="18-24">18-24</option><option value="25-34">25-34</option><option value="35-44">35-44</option><option value="45-54">45-54</option><option value="55-64">55-64</option><option value="65+">65+</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Education</label>
+                                        <select className="w-full border bg-slate-50 dark:bg-zinc-800 rounded p-2 text-sm focus:ring-1 focus:ring-primary" value={personaDraft.education} onChange={e => setPersonaDraft({ ...personaDraft, education: e.target.value })}>
+                                            <option value="">Select...</option><option value="High School">High School</option><option value="Bachelor's">Bachelor's</option><option value="Master's Degree">Master's Degree</option><option value="PhD">PhD</option>
+                                        </select>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Marital Status</label>
+                                            <select className="w-full border bg-slate-50 dark:bg-zinc-800 rounded p-2 text-sm focus:ring-1 focus:ring-primary" value={personaDraft.marital} onChange={e => setPersonaDraft({ ...personaDraft, marital: e.target.value })}>
+                                                <option value="">Select...</option><option value="Single">Single</option><option value="Married">Married</option><option value="Divorced">Divorced</option><option value="Widowed">Widowed</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Income</label>
+                                            <select className="w-full border bg-slate-50 dark:bg-zinc-800 rounded p-2 text-sm focus:ring-1 focus:ring-primary" value={personaDraft.income} onChange={e => setPersonaDraft({ ...personaDraft, income: e.target.value })}>
+                                                <option value="">Select...</option><option value="Under $25k">Under $25k</option><option value="$25k-$50k">$25k-$50k</option><option value="$50k-$75k">$50k-$75k</option><option value="$75k-$100k">$75k-$100k</option><option value="$100k-$150k">$100k-$150k</option><option value="$150k+">$150k+</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <h4 className="font-semibold text-sm pt-4 border-t mt-4 mb-2 text-primary">Technical & Knowledge</h4>
+                                    <div>
+                                        <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Tech Expertise</label>
+                                        <select className="w-full border bg-slate-50 dark:bg-zinc-800 rounded p-2 text-sm focus:ring-1 focus:ring-primary" value={personaDraft.expertise} onChange={e => setPersonaDraft({ ...personaDraft, expertise: e.target.value })}>
+                                            <option value="">Select...</option><option value="Low">Low expertise</option><option value="Medium">Medium expertise</option><option value="High">High expertise</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Internet Usage</label>
+                                        <select className="w-full border bg-slate-50 dark:bg-zinc-800 rounded p-2 text-sm focus:ring-1 focus:ring-primary" value={personaDraft.internet} onChange={e => setPersonaDraft({ ...personaDraft, internet: e.target.value })}>
+                                            <option value="">Select...</option><option value="0-10 hours/week">0-10 hours/week</option><option value="10-20 hours/week">10-20 hours/week</option><option value="20-40 hours/week">20-40 hours/week</option><option value="40+ hours/week">40+ hours/week</option>
+                                        </select>
+                                    </div>
+                                    <div><label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Favorite Sites</label><input type="text" placeholder="e.g. Notion, Medium" className="w-full border bg-slate-50 dark:bg-zinc-800 rounded p-2 text-sm focus:ring-1 focus:ring-primary" value={personaDraft.sites} onChange={e => setPersonaDraft({ ...personaDraft, sites: e.target.value })} /></div>
+                                    <div><label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Knowledge Profile</label><textarea className="w-full border bg-slate-50 dark:bg-zinc-800 rounded p-2 text-sm min-h-[100px] focus:ring-1 focus:ring-primary" value={personaDraft.knowledgeProfile} onChange={e => setPersonaDraft({ ...personaDraft, knowledgeProfile: e.target.value })} /></div>
+
+                                    <div className="mt-6 flex justify-end gap-2 pt-4 border-t">
+                                        <Button variant="outline" onClick={() => setSelectedNode(null)}>Cancel</Button>
+                                        <Button onClick={savePersonaDraft}>Save Persona</Button>
+                                    </div>
                                 </>
                             )}
                         </div>
                     </div>
                 )}
             </div>
-        </div>
+        </div >
     );
 };
-
 
 export const DesignSemanticsTab = ({ loading, app }: DesignViewProps) => {
     const [designMode] = useAtom(designCreationModeAtom);
@@ -765,7 +1205,7 @@ export const DesignSemanticsTab = ({ loading, app }: DesignViewProps) => {
     }
 
     return (
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full bg-white">
             <div className="flex items-center justify-between p-2 border-b">
                 <div className="flex items-center space-x-2">
                     <button
@@ -782,13 +1222,13 @@ export const DesignSemanticsTab = ({ loading, app }: DesignViewProps) => {
                 </div>
 
                 <div className="flex bg-muted p-1 rounded-md">
-                    <button 
+                    <button
                         onClick={() => setViewMode('canvas')}
                         className={`px-3 py-1 text-xs font-medium rounded-sm flex items-center gap-1 transition-all ${viewMode === 'canvas' ? 'bg-background shadow-sm' : 'text-muted-foreground'}`}
                     >
                         <Layout size={14} /> UI Canvas
                     </button>
-                    <button 
+                    <button
                         onClick={() => setViewMode('code')}
                         className={`px-3 py-1 text-xs font-medium rounded-sm flex items-center gap-1 transition-all ${viewMode === 'code' ? 'bg-background shadow-sm' : 'text-muted-foreground'}`}
                     >
