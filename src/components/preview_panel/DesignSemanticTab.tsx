@@ -213,6 +213,10 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
     // Editable Graph State
     const [graph, setGraph] = useState<any>(null);
 
+    const [draggedFlowIndex, setDraggedFlowIndex] = useState<number | null>(null);
+    const [liveSteps, setLiveSteps] = useState<string[] | null>(null); // Holds the live preview array
+    const [insertFlowContext, setInsertFlowContext] = useState<{ index: number, selectedScreen: string, selectedComponent: string } | null>(null);
+
     useEffect(() => {
         try {
             const match = content.match(/```json\n([\s\S]*?)\n```/);
@@ -447,6 +451,62 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
     };
 
     // -- RENDER HELPERS --
+    const handleDragStart = (e: React.DragEvent, index: number, currentSteps: string[]) => {
+        setDraggedFlowIndex(index);
+        setLiveSteps([...currentSteps]); // Capture the current layout into live preview
+        e.dataTransfer.effectAllowed = 'move';
+    };
+
+    const handleDragEnter = (e: React.DragEvent, index: number) => {
+        e.preventDefault();
+        // Prevent firing if we aren't dragging, or if we hover over the item we are already holding
+        if (draggedFlowIndex === null || liveSteps === null || draggedFlowIndex === index) return;
+
+        // Rearrange the live preview array instantly
+        const newSteps = [...liveSteps];
+        const [draggedItem] = newSteps.splice(draggedFlowIndex, 1);
+        newSteps.splice(index, 0, draggedItem);
+
+        setDraggedFlowIndex(index); // Update the dragged index so it follows the mouse!
+        setLiveSteps(newSteps);
+    };
+
+    const handleDragEnd = () => {
+        setDraggedFlowIndex(null);
+        setLiveSteps(null);
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        if (liveSteps) {
+            // Commit the temporary live preview to the actual Graph state
+            setGraph((prev: any) => {
+                const next = JSON.parse(JSON.stringify(prev));
+                const flowIndex = next.edges.flows.findIndex((f: any) => f.name === activeFlow);
+                if (flowIndex > -1) {
+                    next.edges.flows[flowIndex].steps = liveSteps;
+                }
+                return next;
+            });
+        }
+        handleDragEnd();
+    };
+
+    const handleInsertFlowStep = () => {
+        if (!insertFlowContext || !insertFlowContext.selectedScreen) return;
+        const targetId = insertFlowContext.selectedComponent || insertFlowContext.selectedScreen;
+
+        setGraph((prev: any) => {
+            const next = JSON.parse(JSON.stringify(prev));
+            const flowIndex = next.edges.flows.findIndex((f: any) => f.name === activeFlow);
+            if (flowIndex > -1) {
+                next.edges.flows[flowIndex].steps.splice(insertFlowContext.index + 1, 0, targetId);
+            }
+            return next;
+        });
+        setInsertFlowContext(null);
+        setSelectedNode(null);
+    };
     const getNodeById = (id: string) => {
         const screen = graph.nodes.screens.find((s: any) => s.id === id);
         if (screen) return { ...screen, isScreen: true };
@@ -563,7 +623,7 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                         <Plus size={12} />
                                     </Button>
                                 </TooltipTrigger>
-                                <TooltipContent side="top">Add Component</TooltipContent>
+                                <TooltipContent side="top">Add Nested Component</TooltipContent>
                             </Tooltip>
 
                             <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-600 hover:text-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900" onClick={(e) => { e.stopPropagation(); setSelectedNode({ type: isScreen ? 'Screen' : 'Component', ...node }); }}>
@@ -619,9 +679,12 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
         const flow = graph.edges?.flows?.find((f: any) => f.name === activeFlow);
         if (!flow || !flow.steps) return <div className="text-muted-foreground m-auto">Select a flow to view sequence.</div>;
 
+        // USE LIVE PREVIEW IF DRAGGING, OTHERWISE USE GRAPH DATA
+        const displaySteps = liveSteps || flow.steps;
+
         const rows = [];
-        for (let i = 0; i < flow.steps.length; i += itemsPerRow) {
-            rows.push(flow.steps.slice(i, i + itemsPerRow));
+        for (let i = 0; i < displaySteps.length; i += itemsPerRow) {
+            rows.push(displaySteps.slice(i, i + itemsPerRow)); // Slices based on live data
         }
 
         return (
@@ -638,18 +701,46 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                         const node = getNodeById(stepId);
                                         if (!node) return null;
 
+                                        const absoluteIndex = rowIndex * itemsPerRow + colIndex; // Calculate actual index
                                         const isLastInRow = colIndex === rowSteps.length - 1;
                                         const incomingNavs = showNav ? (graph.edges?.navigation?.filter((n: any) => n.toScreenId === node.id || n.toComponentId === node.id) || []) : [];
                                         const outgoingNavs = showNav ? (graph.edges?.navigation?.filter((n: any) => n.fromComponentId === node.id) || []) : [];
 
                                         return (
-                                            <React.Fragment key={`${stepId}-${colIndex}`}>
+                                            <React.Fragment key={`${stepId}-${colIndex}-${absoluteIndex}`}>
+                                                {/* 1. START CAP (Before the very first node) */}
+                                                {absoluteIndex === 0 && (
+                                                    <div className="flex-shrink-0 flex items-center justify-center w-16">
+                                                        <Button
+                                                            size="icon"
+                                                            variant="outline"
+                                                            className="h-8 w-8 rounded-full border-dashed border-2 border-primary text-primary hover:bg-primary hover:text-white hover:border-solid transition-all z-10 bg-background flex-shrink-0"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                // Passing -1 means it will insert at index 0 (the very beginning)
+                                                                setInsertFlowContext({ index: -1, selectedScreen: '', selectedComponent: '' });
+                                                                setSelectedNode({ type: 'InsertFlowStep' });
+                                                            }}
+                                                        >
+                                                            <Plus size={16} strokeWidth={3} />
+                                                        </Button>
+                                                        <div className="h-px flex-1 border-t-2 border-dashed border-primary/50"></div>
+                                                    </div>
+                                                )}
                                                 <div
+                                                    draggable
+                                                    onDragStart={(e) => handleDragStart(e, absoluteIndex, displaySteps)}
+                                                    onDragEnter={(e) => handleDragEnter(e, absoluteIndex)}
+                                                    onDragOver={(e) => e.preventDefault()}
+                                                    onDragEnd={handleDragEnd}
+                                                    onDrop={handleDrop}
                                                     onMouseEnter={(e) => { e.stopPropagation(); setHoveredNodeId(node.id); }}
                                                     onMouseLeave={(e) => { e.stopPropagation(); setHoveredNodeId(null); }}
-                                                    className={`relative flex-shrink-0 w-64 border rounded-xl bg-white dark:bg-zinc-900 shadow-md transition-all ${selectedNode?.id === node.id ? 'ring-2 ring-primary border-primary scale-105' : 'border-border'}`}
+                                                    className={`relative flex-shrink-0 w-64 border rounded-xl bg-white dark:bg-zinc-900 shadow-md transition-all duration-300 
+                                                        ${selectedNode?.id === node.id ? 'ring-2 ring-primary border-primary scale-105' : 'border-border'} 
+                                                        ${draggedFlowIndex === absoluteIndex ? 'opacity-40 border-dashed border-2 ring-2 ring-primary/50 bg-primary/5 scale-95 z-50' : ''}`}
                                                 >
-                                                    <div className={`px-3 py-2 border-b font-semibold text-sm rounded-t-xl flex justify-between items-center ${node.isScreen ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300' : 'bg-muted/30'}`}>
+                                                    <div className={`px-3 py-2 border-b font-semibold text-sm rounded-t-xl flex justify-between items-center cursor-grab active:cursor-grabbing hover:bg-black/5 dark:hover:bg-white/5 ${node.isScreen ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300' : 'bg-muted/30'}`}>
                                                         {node.name}
                                                         <span className="text-[10px] uppercase font-bold opacity-50">{node.isScreen ? 'Screen' : 'Component'}</span>
 
@@ -675,10 +766,49 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                                 </div>
 
                                                 {!isLastInRow && (
-                                                    <div className="flex-shrink-0 text-muted-foreground flex items-center justify-center w-16">
+                                                    <div className="flex-shrink-0 text-muted-foreground flex items-center justify-center w-16 relative group/arrow">
                                                         <div className="h-px flex-1 bg-border"></div>
-                                                        {isEven ? <ArrowRight className="w-5 h-5 text-primary mx-1" /> : <ArrowLeft className="w-5 h-5 text-primary mx-1" />}
+                                                        {isEven ? <ArrowRight className="w-5 h-5 text-primary mx-1 group-hover/arrow:opacity-0 transition-opacity" /> : <ArrowLeft className="w-5 h-5 text-primary mx-1 group-hover/arrow:opacity-0 transition-opacity" />}
                                                         <div className="h-px flex-1 bg-border"></div>
+
+                                                        {/* Hover Plus Button */}
+                                                        <Button
+                                                            size="icon"
+                                                            variant="outline"
+                                                            className="absolute h-6 w-6 rounded-full opacity-0 group-hover/arrow:opacity-100 transition-opacity bg-background border-primary text-primary hover:bg-primary hover:text-white"
+                                                            onClick={() => {
+                                                                setInsertFlowContext({ index: absoluteIndex, selectedScreen: '', selectedComponent: '' });
+                                                                setSelectedNode({ type: 'InsertFlowStep' });
+                                                            }}
+                                                        >
+                                                            <Plus size={12} strokeWidth={3} />
+                                                        </Button>
+                                                    </div>
+                                                )}
+
+                                                {/* 2. END CAP (After the very last node) */}
+                                                {absoluteIndex === flow.steps.length - 1 && (
+                                                    <div className="flex-shrink-0 flex items-center justify-center w-16">
+
+                                                        {/* Render line BEFORE the button if it's an even row (going right) */}
+                                                        {isEven && <div className="h-px flex-1 border-t-2 border-dashed border-primary/50"></div>}
+
+                                                        <Button
+                                                            size="icon"
+                                                            variant="outline"
+                                                            className="h-8 w-8 rounded-full border-dashed border-2 border-primary text-primary hover:bg-primary hover:text-white hover:border-solid transition-all z-10 bg-background flex-shrink-0"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setInsertFlowContext({ index: absoluteIndex, selectedScreen: '', selectedComponent: '' });
+                                                                setSelectedNode({ type: 'InsertFlowStep' });
+                                                            }}
+                                                        >
+                                                            <Plus size={16} strokeWidth={3} />
+                                                        </Button>
+
+                                                        {/* Render line AFTER the button if it's an odd row (going left) */}
+                                                        {!isEven && <div className="h-px flex-1 border-t-2 border-dashed border-primary/50"></div>}
+
                                                     </div>
                                                 )}
                                             </React.Fragment>
@@ -688,10 +818,24 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
 
                                 {!isLastRow && (
                                     <div className={`w-full flex ${isEven ? 'justify-end' : 'justify-start'}`}>
-                                        <div className="flex flex-col items-center w-64">
+                                        <div className="flex flex-col items-center w-64 relative group/arrow">
                                             <div className="w-px h-6 bg-border"></div>
-                                            <ArrowDown className="w-5 h-5 text-primary my-1" />
+                                            <ArrowDown className="w-5 h-5 text-primary my-1 group-hover/arrow:opacity-0 transition-opacity" />
                                             <div className="w-px h-6 bg-border"></div>
+
+                                            {/* Hover Plus Button */}
+                                            <Button
+                                                size="icon"
+                                                variant="outline"
+                                                className="absolute top-[18px] h-6 w-6 rounded-full opacity-0 group-hover/arrow:opacity-100 transition-opacity bg-background border-primary text-primary hover:bg-primary hover:text-white"
+                                                onClick={() => {
+                                                    const lastIndexInRow = rowIndex * itemsPerRow + rowSteps.length - 1;
+                                                    setInsertFlowContext({ index: lastIndexInRow, selectedScreen: '', selectedComponent: '' });
+                                                    setSelectedNode({ type: 'InsertFlowStep' });
+                                                }}
+                                            >
+                                                <Plus size={12} strokeWidth={3} />
+                                            </Button>
                                         </div>
                                     </div>
                                 )}
@@ -1004,6 +1148,55 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                 </>
                             )}
 
+                            {/* Add this inside the sidebar rendering area */}
+                            {selectedNode.type === 'InsertFlowStep' && insertFlowContext && (
+                                <>
+                                    <div>
+                                        <label className="text-xs font-semibold text-muted-foreground mb-1 block">1. Select Screen (Required)</label>
+                                        <select
+                                            className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary"
+                                            value={insertFlowContext.selectedScreen}
+                                            onChange={(e) => setInsertFlowContext({ ...insertFlowContext, selectedScreen: e.target.value, selectedComponent: '' })}
+                                        >
+                                            <option value="">Select a screen...</option>
+                                            {graph.nodes?.screens?.filter((s: any) => s.parent === 'body').map((n: any) => (
+                                                <option key={n.id} value={n.id}>{n.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {insertFlowContext.selectedScreen && (
+                                        <div>
+                                            <label className="text-xs font-semibold text-muted-foreground mb-1 block mt-4">2. Select Component (Optional)</label>
+                                            <select
+                                                className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary"
+                                                value={insertFlowContext.selectedComponent}
+                                                onChange={(e) => setInsertFlowContext({ ...insertFlowContext, selectedComponent: e.target.value })}
+                                            >
+                                                <option value="">Entire Screen (Default)</option>
+                                                {/* Recursively find all children components of the selected screen */}
+                                                {graph.nodes?.components?.filter((c: any) => {
+                                                    const checkParent = (id: string): boolean => {
+                                                        if (id === insertFlowContext.selectedScreen) return true;
+                                                        const node = graph.nodes.components.find((comp: any) => comp.id === id);
+                                                        if (node && node.parent !== 'body') return checkParent(node.parent);
+                                                        return false;
+                                                    };
+                                                    return checkParent(c.id);
+                                                }).map((n: any) => (
+                                                    <option key={n.id} value={n.id}>{n.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    <div className="pt-4 border-t flex justify-end gap-2 mt-4">
+                                        <Button variant="outline" size="sm" onClick={() => { setInsertFlowContext(null); setSelectedNode(null); }}>Cancel</Button>
+                                        <Button size="sm" disabled={!insertFlowContext.selectedScreen} onClick={handleInsertFlowStep}>Insert Step</Button>
+                                    </div>
+                                </>
+                            )}
+
                             {/* Detailed Editor fields for Personas */}
                             {selectedNode.type === 'PersonaForm' && personaDraft && (
                                 <>
@@ -1216,9 +1409,6 @@ export const DesignSemanticsTab = ({ loading, app }: DesignViewProps) => {
                     >
                         <RefreshCw size={16} />
                     </button>
-                    <div className="text-sm font-medium text-foreground flex items-center gap-2">
-                        {DESIGN_FILE}
-                    </div>
                 </div>
 
                 <div className="flex bg-muted p-1 rounded-md">
