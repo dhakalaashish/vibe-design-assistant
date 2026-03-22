@@ -898,17 +898,34 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                 </select>
                             )}
                             {mode === 'structure' && showFunctionality && (
-                                <select
-                                    className="bg-muted/50 border border-border rounded-md px-2 py-1 text-xs outline-none font-medium w-full max-w-[350px] truncate"
-                                    value={activeFunction || ""}
-                                    onChange={(e) => setActiveFunction(e.target.value)}
-                                >
-                                    {graph.metadata?.functionalities?.map((f: any) => (
-                                        <option key={f.name} value={f.name}>
-                                            {f.name.length > 50 ? `${f.name.substring(0, 45)}...` : f.name}
-                                        </option>
-                                    ))}
-                                </select>
+                                <div className="flex items-center gap-2">
+                                    <select
+                                        className="bg-muted/50 border border-border rounded-md px-2 py-1 text-xs outline-none font-medium w-full max-w-[300px] truncate"
+                                        value={activeFunction || ""}
+                                        onChange={(e) => setActiveFunction(e.target.value)}
+                                    >
+                                        {graph.metadata?.functionalities?.map((f: any) => (
+                                            <option key={f.name} value={f.name}>
+                                                {f.name.length > 50 ? `${f.name.substring(0, 45)}...` : f.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-7 text-xs border-dashed text-primary hover:bg-primary hover:text-white"
+                                                onClick={() => setSelectedNode({ type: 'FunctionalityForm', isNew: true, name: '', description: '', relatedNodes: [] })}
+                                            >
+                                                <Plus size={12} className="mr-1" /> New
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top">
+                                            Add a new functionality
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </div>
                             )}
                         </div>
                         {/* Checkboxes Group - Used shorter labels to save space */}
@@ -1036,29 +1053,81 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                         </div>
                     )}
                     {mode === 'structure' && (
-                        <div className="flex flex-wrap gap-8 items-start pb-20 justify-center">
-                            {graph.nodes?.screens?.filter((s: any) => {
-                                // Only show top-level screens (parent === 'body')
-                                if (s.parent !== 'body') return false;
+                        <div className="flex flex-col w-full h-full relative">
+                            {/* --- STICKY FUNCTIONALITY HEADER --- */}
+                            {showFunctionality && activeFunction && (
+                                <div className="sticky -top-8 z-40 -mt-8 -mx-8 px-8 pt-6 pb-4 mb-8 bg-slate-50/95 dark:bg-zinc-950/95 backdrop-blur-md border-b border-border/50 flex flex-col items-center animate-in fade-in slide-in-from-top-2">
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <span className="bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full">
+                                            {activeFunction}
+                                        </span>
 
-                                // If functionality view is ON, only show screens that are "active"
-                                if (showFunctionality && activeFunction) {
-                                    return isNodeActive(s.id);
-                                }
+                                        {/* Actions moved inline to prevent overlap */}
+                                        <div className="flex items-center gap-1 bg-white/50 dark:bg-zinc-900/50 rounded-full px-1 border border-border/50">
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full text-blue-600 hover:bg-blue-100" onClick={() => {
+                                                        const func = graph.metadata?.functionalities?.find((f: any) => f.name === activeFunction);
+                                                        setSelectedNode({ type: 'FunctionalityForm', isNew: false, originalName: activeFunction, ...func });
+                                                    }}>
+                                                        <Edit2 size={12} />
+                                                    </Button>
+                                                </TooltipTrigger>
+                                                <TooltipContent side="bottom">Edit Functionality</TooltipContent>
+                                            </Tooltip>
 
-                                // Otherwise show all top-level screens
-                                return true;
-                            }).map((screen: any) => renderStandardNode(screen, 0))}
-
-                            {/* Hide 'Add Screen' button when focusing on a specific functionality to keep the view clean */}
-                            {(!showFunctionality || !activeFunction) && (
-                                <div
-                                    onClick={() => setSelectedNode({ type: 'NewNode', isScreen: true, parent: 'body', name: '', purpose: '', styles: '', connectedTo: '' })}
-                                    className="w-80 border-2 border-dashed border-border hover:border-primary/50 rounded-xl flex items-center justify-center p-6 cursor-pointer text-muted-foreground hover:text-primary transition-colors min-h-[150px]"
-                                >
-                                    + Add Screen
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full text-red-600 hover:bg-red-100" onClick={() => {
+                                                        setGraph((prev: any) => {
+                                                            const next = JSON.parse(JSON.stringify(prev));
+                                                            next.metadata.functionalities = next.metadata.functionalities.filter((f: any) => f.name !== activeFunction);
+                                                            return next;
+                                                        });
+                                                        setActiveFunction(null);
+                                                    }}>
+                                                        <Trash2 size={12} />
+                                                    </Button>
+                                                </TooltipTrigger>
+                                                <TooltipContent side="bottom">Delete Functionality</TooltipContent>
+                                            </Tooltip>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
+                            {/* --- NEW FUNCTIONALITY DESCRIPTION BANNER --- */}
+                            {showFunctionality && activeFunction && (
+                                <div className="max-w-2xl w-full mx-auto mb-8 flex flex-col items-center text-center animate-in fade-in slide-in-from-top-2">
+                                    <p className="text-sm text-muted-foreground">
+                                        {graph?.metadata?.functionalities?.find((f: any) => f.name === activeFunction)?.description || "No description provided."}
+                                    </p>
+                                </div>
+                            )}
+
+                            <div className="flex flex-wrap gap-8 items-start pb-20 justify-center">
+                                {graph.nodes?.screens?.filter((s: any) => {
+                                    // Only show top-level screens (parent === 'body')
+                                    if (s.parent !== 'body') return false;
+
+                                    // If functionality view is ON, only show screens that are "active"
+                                    if (showFunctionality && activeFunction) {
+                                        return isNodeActive(s.id);
+                                    }
+
+                                    // Otherwise show all top-level screens
+                                    return true;
+                                }).map((screen: any) => renderStandardNode(screen, 0))}
+
+                                {/* Hide 'Add Screen' button when focusing on a specific functionality to keep the view clean */}
+                                {(!showFunctionality || !activeFunction) && (
+                                    <div
+                                        onClick={() => setSelectedNode({ type: 'NewNode', isScreen: true, parent: 'body', name: '', purpose: '', styles: '', connectedTo: '' })}
+                                        className="w-80 border-2 border-dashed border-border hover:border-primary/50 rounded-xl flex items-center justify-center p-6 cursor-pointer text-muted-foreground hover:text-primary transition-colors min-h-[150px]"
+                                    >
+                                        + Add Screen
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
                 </div>
@@ -1090,7 +1159,9 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                     <div className="w-96 border-l bg-white dark:bg-zinc-900 shadow-2xl p-5 flex flex-col z-20 overflow-y-auto animate-in slide-in-from-right-8 border-t-0 border-r-0 border-b-0">
                         <div className="flex justify-between items-center mb-6 pb-4 border-b">
                             <span className="text-xs font-bold uppercase tracking-wider text-primary">
-                                {selectedNode.type === 'PersonaForm' ? (personaDraft?.isNew ? 'Add Persona' : 'Edit Persona') : `${selectedNode.type} Settings`}
+                                {selectedNode.type === 'PersonaForm' ? (personaDraft?.isNew ? 'Add Persona' : 'Edit Persona') :
+                                    selectedNode.type === 'FunctionalityForm' ? (selectedNode.isNew ? 'Add Functionality' : 'Edit Functionality') :
+                                        `${selectedNode.type} Settings`}
                             </span>
                             <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setSelectedNode(null)}>✕</Button>
                         </div>
@@ -1257,6 +1328,78 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                     <div className="mt-6 flex justify-end gap-2 pt-4 border-t">
                                         <Button variant="outline" onClick={() => setSelectedNode(null)}>Cancel</Button>
                                         <Button onClick={savePersonaDraft}>Save Persona</Button>
+                                    </div>
+                                </>
+                            )}
+                            {/* Editor fields for Functionalities */}
+                            {selectedNode.type === 'FunctionalityForm' && (
+                                <>
+                                    <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Functionality Name</label><input className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.name} onChange={(e) => setSelectedNode({ ...selectedNode, name: e.target.value })} autoFocus /></div>
+                                    <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Description</label><textarea className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary min-h-[80px]" value={selectedNode.description || ''} onChange={(e) => setSelectedNode({ ...selectedNode, description: e.target.value })} /></div>
+
+                                    <div>
+                                        <label className="text-xs font-semibold text-muted-foreground mb-2 block">Associated Screen/Components</label>
+                                        <div className="border border-border bg-slate-50 dark:bg-zinc-800 rounded-md p-2 h-72 overflow-y-auto space-y-0.5">
+                                            {(() => {
+                                                const renderCheckboxTree = (parentId: string, depth: number = 0): React.ReactNode => {
+                                                    const children = parentId === 'body'
+                                                        ? graph.nodes?.screens?.filter((s: any) => s.parent === 'body') || []
+                                                        : graph.nodes?.components?.filter((c: any) => c.parent === parentId) || [];
+
+                                                    return children.map((n: any) => {
+                                                        const isSelected = selectedNode.relatedNodes?.includes(n.id);
+                                                        return (
+                                                            <React.Fragment key={n.id}>
+                                                                <label
+                                                                    className="flex items-center gap-2 text-xs cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 py-1.5 pr-2 rounded transition-colors"
+                                                                    style={{ marginLeft: `${depth * 12}px`, borderLeft: depth > 0 ? '1px dashed rgba(150,150,150,0.3)' : 'none', paddingLeft: depth > 0 ? '8px' : '4px' }}
+                                                                >
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={isSelected}
+                                                                        onChange={(e) => {
+                                                                            const newRelated = e.target.checked
+                                                                                ? [...(selectedNode.relatedNodes || []), n.id]
+                                                                                : selectedNode.relatedNodes.filter((id: string) => id !== n.id);
+                                                                            setSelectedNode({ ...selectedNode, relatedNodes: newRelated });
+                                                                        }}
+                                                                        className="rounded text-primary focus:ring-primary h-3.5 w-3.5"
+                                                                    />
+                                                                    <span className="truncate font-medium flex-1">{n.name}</span>
+                                                                    {depth === 0 && <span className="opacity-40 text-[9px] uppercase tracking-wider">Screen</span>}
+                                                                </label>
+                                                                {renderCheckboxTree(n.id, depth + 1)}
+                                                            </React.Fragment>
+                                                        );
+                                                    });
+                                                };
+                                                return renderCheckboxTree('body', 0);
+                                            })()}
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-4 border-t flex justify-end gap-2 mt-4">
+                                        <Button variant="outline" size="sm" onClick={() => setSelectedNode(null)}>Cancel</Button>
+                                        <Button size="sm" onClick={() => {
+                                            if (!selectedNode.name) return;
+                                            setGraph((prev: any) => {
+                                                const next = JSON.parse(JSON.stringify(prev));
+                                                if (!next.metadata) next.metadata = {};
+                                                if (!next.metadata.functionalities) next.metadata.functionalities = [];
+
+                                                const newFunc = { name: selectedNode.name, description: selectedNode.description, relatedNodes: selectedNode.relatedNodes || [] };
+
+                                                if (selectedNode.isNew) {
+                                                    next.metadata.functionalities.push(newFunc);
+                                                } else {
+                                                    const idx = next.metadata.functionalities.findIndex((f: any) => f.name === selectedNode.originalName);
+                                                    if (idx > -1) next.metadata.functionalities[idx] = newFunc;
+                                                }
+                                                return next;
+                                            });
+                                            setActiveFunction(selectedNode.name);
+                                            setSelectedNode(null);
+                                        }}>Save</Button>
                                     </div>
                                 </>
                             )}

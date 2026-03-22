@@ -523,7 +523,7 @@ function FindingsTable({
                                                     className={`w-full ${isAnyTaskInProgress ? "cursor-not-allowed opacity-50" : "cursor-pointer"
                                                         }`}
                                                 >
-                                                    Discuss Prompt
+                                                    Discuss & Improve
                                                 </Button>
                                             </>
                                         )}
