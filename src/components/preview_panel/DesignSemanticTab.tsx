@@ -187,8 +187,18 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
     const [mode, setMode] = useState<CanvasMode>('project');
     const [selectedNode, setSelectedNode] = useState<any | null>(null);
     const [nodeToDelete, setNodeToDelete] = useState<any | null>(null);
+    const [flowToDelete, setFlowToDelete] = useState<string | null>(null);
     const [activeFlow, setActiveFlow] = useState<string | null>(null);
     const [activeFunction, setActiveFunction] = useState<string | null>(null);
+
+    const [functionToDelete, setFunctionToDelete] = useState<string | null>(null);
+    const [editingFlowTitle, setEditingFlowTitle] = useState<boolean>(false);
+    const [editingFlowDesc, setEditingFlowDesc] = useState<boolean>(false);
+    const [flowDraft, setFlowDraft] = useState<{ name: string, description: string } | null>(null);
+
+    const [editingFuncTitle, setEditingFuncTitle] = useState<boolean>(false);
+    const [editingFuncDesc, setEditingFuncDesc] = useState<boolean>(false);
+    const [funcDraft, setFuncDraft] = useState<{ name: string, description: string } | null>(null);
 
     // View Options 
     const [zoomLevel, setZoomLevel] = useState<number>(1);
@@ -222,10 +232,10 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
             const match = content.match(/```json\n([\s\S]*?)\n```/);
             const parsedGraph = match && match[1] ? JSON.parse(match[1]) : JSON.parse(content);
             setGraph(parsedGraph);
-            if (parsedGraph.edges?.flows?.length > 0) {
-                setActiveFlow(parsedGraph.edges.flows[0].name);
+            if (parsedGraph.structure?.edges?.flows?.length > 0) {
+                setActiveFlow(parsedGraph.structure?.edges.flows[0].name);
             }
-            if (expandedNodes.size === 0 && parsedGraph.nodes?.screens) {
+            if (expandedNodes.size === 0 && parsedGraph.structure?.nodes?.screens) {
                 setExpandedNodes(new Set());
             }
         } catch (e) {
@@ -254,19 +264,19 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
         const calcDepth = (id: string): number => {
             if (id === 'body') return -1;
             if (map.has(id)) return map.get(id);
-            const node = [...(graph.nodes?.screens || []), ...(graph.nodes?.components || [])].find((n: any) => n.id === id);
+            const node = [...(graph.structure?.nodes?.screens || []), ...(graph.structure?.nodes?.components || [])].find((n: any) => n.id === id);
             if (!node) return 0;
             const d = calcDepth(node.parent) + 1;
             map.set(id, d);
             return d;
         };
-        [...(graph.nodes?.screens || []), ...(graph.nodes?.components || [])].forEach((n: any) => calcDepth(n.id));
+        [...(graph.structure?.nodes?.screens || []), ...(graph.structure?.nodes?.components || [])].forEach((n: any) => calcDepth(n.id));
         return map;
     }, [graph]);
 
     const nodesWithChildren = useMemo(() => {
         if (!graph) return new Set();
-        return new Set([...(graph.nodes?.screens || []), ...(graph.nodes?.components || [])].map((n: any) => n.parent));
+        return new Set([...(graph.structure?.nodes?.screens || []), ...(graph.structure?.nodes?.components || [])].map((n: any) => n.parent));
     }, [graph]);
 
     if (!graph) {
@@ -278,14 +288,14 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
         );
     }
 
-    const canZoomIn = [...(graph?.nodes?.screens || []), ...(graph?.nodes?.components || [])].some((n: any) => nodesWithChildren.has(n.id) && !expandedNodes.has(n.id));
+    const canZoomIn = [...(graph?.structure?.nodes?.screens || []), ...(graph?.structure?.nodes?.components || [])].some((n: any) => nodesWithChildren.has(n.id) && !expandedNodes.has(n.id));
     const canZoomOut = expandedNodes.size > 0;
 
     const handleZoomIn = () => {
         const expandedDepths = Array.from(expandedNodes).map(id => depthMap.get(id) || 0);
         const currentMaxDepth = expandedDepths.length > 0 ? Math.max(...expandedDepths) : -1;
         const targetDepth = currentMaxDepth + 1;
-        const nodesToExpand = [...(graph.nodes?.screens || []), ...(graph.nodes?.components || [])].filter((n: any) => depthMap.get(n.id) === targetDepth && nodesWithChildren.has(n.id)).map((n: any) => n.id);
+        const nodesToExpand = [...(graph.structure?.nodes?.screens || []), ...(graph.structure?.nodes?.components || [])].filter((n: any) => depthMap.get(n.id) === targetDepth && nodesWithChildren.has(n.id)).map((n: any) => n.id);
         if (nodesToExpand.length > 0) setExpandedNodes(prev => new Set([...prev, ...nodesToExpand]));
     };
 
@@ -307,7 +317,7 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
             const next = JSON.parse(JSON.stringify(prev)); // Deep copy to prevent strict mode mutation bugs
             if (selectedNode.type === 'Screen' || selectedNode.type === 'Component') {
                 const isScreen = selectedNode.parent === 'body';
-                const arrayToUpdate = isScreen ? next.nodes.screens : next.nodes.components;
+                const arrayToUpdate = isScreen ? next.structure.nodes.screens : next.structure.nodes.components;
                 const index = arrayToUpdate.findIndex((n: any) => n.id === selectedNode.id);
                 if (index !== -1) arrayToUpdate[index] = { ...arrayToUpdate[index], [field]: value };
             }
@@ -315,7 +325,7 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                 if (field === 'description') next.strategy.productDescription = value;
                 if (field === 'objectiveUsers') next.strategy.objectives.forUsers = value;
                 if (field === 'objectiveCreator') next.strategy.objectives.forCreator = value;
-                if (field === 'outOfScope') next.scope.outOfScope = value.split('\n').filter((l: string) => l.trim() !== '');
+                if (field === 'outOfScope') next.strategy.outOfScope = value.split('\n').filter((l: string) => l.trim() !== '');
             }
             else if (selectedNode.type === 'Persona') {
                 const idx = selectedNode.index;
@@ -337,11 +347,11 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
             if (inlineEdit.field === 'objectiveUsers') next.strategy.objectives.forUsers = inlineEdit.value;
             if (inlineEdit.field === 'objectiveCreator') next.strategy.objectives.forCreator = inlineEdit.value;
             if (inlineEdit.field === 'constraint') {
-                if (!next.scope) next.scope = { outOfScope: [] };
+                if (!next.strategy.outOfScope) next.strategy.outOfScope = [];
                 if (inlineEdit.index !== undefined) {
-                    next.scope.outOfScope[inlineEdit.index] = inlineEdit.value;
+                    next.strategy.outOfScope[inlineEdit.index] = inlineEdit.value;
                 } else {
-                    next.scope.outOfScope.push(inlineEdit.value);
+                    next.strategy.outOfScope.push(inlineEdit.value);
                 }
             }
             return next;
@@ -352,7 +362,7 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
     const deleteConstraint = (index: number) => {
         setGraph((prev: any) => {
             const next = JSON.parse(JSON.stringify(prev));
-            next.scope.outOfScope.splice(index, 1);
+            next.strategy.outOfScope.splice(index, 1);
             return next;
         });
     };
@@ -362,7 +372,7 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
         const newComp = { id: newId, parent: parentId, name: "New Component", purpose: "Describe purpose...", styles: "Inherited from Global" };
         setGraph((prev: any) => {
             const next = JSON.parse(JSON.stringify(prev));
-            next.nodes.components.push(newComp);
+            next.structure.nodes.components.push(newComp);
             return next;
         });
         setExpandedNodes(prev => new Set([...prev, parentId]));
@@ -373,9 +383,9 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
         setGraph((prev: any) => {
             const next = JSON.parse(JSON.stringify(prev));
             const deleteRecursive = (id: string) => {
-                next.nodes.screens = next.nodes.screens.filter((s: any) => s.id !== id);
-                next.nodes.components = next.nodes.components.filter((c: any) => c.id !== id);
-                const children = [...(next.nodes.screens || []), ...(next.nodes.components || [])].filter(c => c.parent === id);
+                next.structure.nodes.screens = next.structure.nodes.screens.filter((s: any) => s.id !== id);
+                next.structure.nodes.components = next.structure.nodes.components.filter((c: any) => c.id !== id);
+                const children = [...(next.structure.nodes.screens || []), ...(next.structure.nodes.components || [])].filter(c => c.parent === id);
                 children.forEach(c => deleteRecursive(c.id));
             };
             deleteRecursive(nodeToDelete.id);
@@ -406,13 +416,48 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
 
     const openPersonaEditor = (p?: any, index?: number) => {
         if (p) {
-            const demParts = p.demographics ? p.demographics.split(',').map((s: string) => s.trim()) : [];
+            // Map Age
+            let mappedAge = p.demographics?.age || '';
+            if (typeof mappedAge === 'number') {
+                if (mappedAge < 18) mappedAge = 'Under 18';
+                else if (mappedAge <= 24) mappedAge = '18-24';
+                else if (mappedAge <= 34) mappedAge = '25-34';
+                else if (mappedAge <= 44) mappedAge = '35-44';
+                else if (mappedAge <= 54) mappedAge = '45-54';
+                else if (mappedAge <= 64) mappedAge = '55-64';
+                else mappedAge = '65+';
+            }
+
+            // Map Income
+            let mappedIncome = p.demographics?.annual_income || '';
+            if (typeof mappedIncome === 'number') {
+                if (mappedIncome < 25000) mappedIncome = 'Under $25k';
+                else if (mappedIncome <= 50000) mappedIncome = '$25k-$50k';
+                else if (mappedIncome <= 75000) mappedIncome = '$50k-$75k';
+                else if (mappedIncome <= 100000) mappedIncome = '$75k-$100k';
+                else if (mappedIncome <= 150000) mappedIncome = '$100k-$150k';
+                else mappedIncome = '$150k+';
+            }
+
+            // Map Internet Usage
+            let mappedInternet = p.technicalProfile?.internet_usage || '';
+            if (typeof mappedInternet === 'number') {
+                if (mappedInternet <= 10) mappedInternet = '0-10 hours/week';
+                else if (mappedInternet <= 20) mappedInternet = '10-20 hours/week';
+                else if (mappedInternet <= 40) mappedInternet = '20-40 hours/week';
+                else mappedInternet = '40+ hours/week';
+            }
+
             setPersonaDraft({
                 isNew: false, index, name: p.name || '',
-                gender: demParts[0] || '', age: demParts[1] || '', education: demParts[2] || '', marital: demParts[3] || '', income: demParts[4] || '',
-                expertise: p.technicalProfile?.includes('Low') ? 'Low' : p.technicalProfile?.includes('Medium') ? 'Medium' : p.technicalProfile?.includes('High') ? 'High' : '',
-                internet: p.technicalProfile?.match(/Uses internet (.*?)(?:\.|$)/)?.[1] || '',
-                sites: p.technicalProfile?.match(/Favorite sites: (.*?)(?:\.|$)/)?.[1] || '',
+                gender: p.demographics?.gender || '',
+                age: mappedAge,
+                education: p.demographics?.education_level || '',
+                marital: p.demographics?.marital_status || '',
+                income: mappedIncome,
+                expertise: p.technicalProfile?.expertise_level || '',
+                internet: mappedInternet,
+                sites: p.technicalProfile?.favourite_sites || '',
                 knowledgeProfile: p.knowledgeProfile || ''
             });
         } else {
@@ -427,11 +472,20 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
         if (!personaDraft) return;
         setGraph((prev: any) => {
             const next = JSON.parse(JSON.stringify(prev));
-            const techStr = `${personaDraft.expertise} expertise. Uses internet ${personaDraft.internet}. Favorite sites: ${personaDraft.sites}.`.trim();
             const p = {
                 name: personaDraft.name,
-                demographics: [personaDraft.gender, personaDraft.age, personaDraft.education, personaDraft.marital, personaDraft.income].filter(Boolean).join(', '),
-                technicalProfile: techStr.replace(/^[. ]+|[. ]+$/g, ''),
+                demographics: {
+                    gender: personaDraft.gender,
+                    age: personaDraft.age,
+                    education_level: personaDraft.education,
+                    marital_status: personaDraft.marital,
+                    annual_income: personaDraft.income
+                },
+                technicalProfile: {
+                    expertise_level: personaDraft.expertise,
+                    internet_usage: personaDraft.internet,
+                    favourite_sites: personaDraft.sites
+                },
                 knowledgeProfile: personaDraft.knowledgeProfile
             };
             if (!next.strategy) next.strategy = {};
@@ -445,8 +499,8 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
 
     const handleToggleFunctionality = (checked: boolean) => {
         setShowFunctionality(checked);
-        if (checked && !activeFunction && graph?.metadata?.functionalities?.length > 0) {
-            setActiveFunction(graph.metadata.functionalities[0].name);
+        if (checked && !activeFunction && graph?.structure?.functionalities?.length > 0) {
+            setActiveFunction(graph.structure.functionalities[0].name);
         }
     };
 
@@ -476,15 +530,31 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
         setLiveSteps(null);
     };
 
+    const handleDragOverContainer = (e: React.DragEvent) => {
+        e.preventDefault();
+        const container = flowContainerRef.current;
+        if (!container || draggedFlowIndex === null) return;
+
+        const scrollSpeed = 6;
+        const threshold = 80;
+        const rect = container.getBoundingClientRect();
+
+        if (e.clientY - rect.top < threshold) {
+            container.scrollTop -= scrollSpeed;
+        } else if (rect.bottom - e.clientY < threshold) {
+            container.scrollTop += scrollSpeed;
+        }
+    };
+
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
         if (liveSteps) {
             // Commit the temporary live preview to the actual Graph state
             setGraph((prev: any) => {
                 const next = JSON.parse(JSON.stringify(prev));
-                const flowIndex = next.edges.flows.findIndex((f: any) => f.name === activeFlow);
+                const flowIndex = next.structure.edges.flows.findIndex((f: any) => f.name === activeFlow);
                 if (flowIndex > -1) {
-                    next.edges.flows[flowIndex].steps = liveSteps;
+                    next.structure.edges.flows[flowIndex].steps = liveSteps;
                 }
                 return next;
             });
@@ -498,9 +568,9 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
 
         setGraph((prev: any) => {
             const next = JSON.parse(JSON.stringify(prev));
-            const flowIndex = next.edges.flows.findIndex((f: any) => f.name === activeFlow);
+            const flowIndex = next.structure.edges.flows.findIndex((f: any) => f.name === activeFlow);
             if (flowIndex > -1) {
-                next.edges.flows[flowIndex].steps.splice(insertFlowContext.index + 1, 0, targetId);
+                next.structure.edges.flows[flowIndex].steps.splice(insertFlowContext.index + 1, 0, targetId);
             }
             return next;
         });
@@ -508,9 +578,9 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
         setSelectedNode(null);
     };
     const getNodeById = (id: string) => {
-        const screen = graph.nodes.screens.find((s: any) => s.id === id);
+        const screen = graph.structure?.nodes?.screens?.find((s: any) => s.id === id);
         if (screen) return { ...screen, isScreen: true };
-        const comp = graph.nodes.components.find((c: any) => c.id === id);
+        const comp = graph.structure?.nodes?.components?.find((c: any) => c.id === id);
         if (comp) return { ...comp, isScreen: false };
         return null;
     };
@@ -518,11 +588,11 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
     const isNodeActive = (id: string): boolean => {
         if (mode === 'structure') {
             if (showFunctionality && activeFunction) {
-                const func = graph.metadata?.functionalities?.find((f: any) => f.name === activeFunction);
+                const func = graph.structure?.functionalities?.find((f: any) => f.name === activeFunction);
                 if (!func) return true;
                 if (func.relatedNodes.includes(id)) return true;
                 const hasActiveChild = (nodeId: string): boolean => {
-                    const children = graph.nodes.components.filter((c: any) => c.parent === nodeId);
+                    const children = graph.structure?.nodes.components.filter((c: any) => c.parent === nodeId);
                     return children.some((c: any) => func.relatedNodes.includes(c.id) || hasActiveChild(c.id));
                 };
                 return hasActiveChild(id);
@@ -530,7 +600,7 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
             return true;
         }
         if (mode === 'flows' && activeFlow) {
-            const flow = graph.edges?.flows?.find((f: any) => f.name === activeFlow);
+            const flow = graph.structure?.edges?.flows?.find((f: any) => f.name === activeFlow);
             return flow?.steps.includes(id);
         }
         return true;
@@ -540,32 +610,68 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
         const isEditing = inlineEdit?.field === field;
         return (
             <div
-                className="group/field relative border border-transparent hover:border-border rounded-lg p-2 -mx-2 transition-colors"
+                className="group/field relative"
                 onMouseEnter={() => setHoveredNodeId(`inline-${field}`)}
                 onMouseLeave={() => setHoveredNodeId(null)}
             >
                 <div className="flex justify-between items-start mb-1">
                     <span className="font-semibold text-muted-foreground uppercase text-xs tracking-wider">{title}</span>
-                    {!isEditing && hoveredNodeId === `inline-${field}` && (
-                        <Button variant="ghost" size="icon" className="h-6 w-6 absolute right-2 top-2 text-blue-600 hover:bg-blue-100" onClick={() => setInlineEdit({ field, value: currentValue })}>
-                            <Edit2 size={12} />
-                        </Button>
-                    )}
                 </div>
                 {isEditing ? (
-                    <div className="space-y-2 mt-2">
+                    <div className="relative mt-1 -mx-2 p-2 border border-primary/50 rounded-md bg-white dark:bg-zinc-900 shadow-sm">
                         {isTextarea ? (
-                            <textarea className="w-full bg-white dark:bg-zinc-900 border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-primary min-h-[80px]" value={inlineEdit.value} onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })} autoFocus />
+                            <textarea
+                                className="w-full bg-transparent border-none text-sm p-0 focus:ring-0 outline-none resize-none leading-relaxed overflow-hidden block m-0"
+                                value={inlineEdit.value}
+                                onChange={(e) => {
+                                    setInlineEdit({ ...inlineEdit, value: e.target.value });
+                                    e.target.style.height = 'auto';
+                                    e.target.style.height = `${e.target.scrollHeight}px`;
+                                }}
+                                onFocus={(e) => {
+                                    e.target.style.height = 'auto';
+                                    e.target.style.height = `${e.target.scrollHeight}px`;
+                                }}
+                                onBlur={saveInlineEdit}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                        e.preventDefault();
+                                        saveInlineEdit();
+                                    } else if (e.key === 'Escape') {
+                                        setInlineEdit(null);
+                                    }
+                                }}
+                                autoFocus
+                            />
                         ) : (
-                            <input className="w-full bg-white dark:bg-zinc-900 border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-primary" value={inlineEdit.value} onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })} autoFocus />
+                            <input
+                                className="w-full bg-transparent border-none text-sm p-0 focus:ring-0 outline-none leading-relaxed block m-0"
+                                value={inlineEdit.value}
+                                onChange={(e) => setInlineEdit({ ...inlineEdit, value: e.target.value })}
+                                onBlur={saveInlineEdit}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        saveInlineEdit();
+                                    } else if (e.key === 'Escape') {
+                                        setInlineEdit(null);
+                                    }
+                                }}
+                                autoFocus
+                            />
                         )}
-                        <div className="flex justify-end gap-2">
-                            <Button variant="outline" size="sm" onClick={() => setInlineEdit(null)}>Cancel</Button>
-                            <Button size="sm" onClick={saveInlineEdit}>Save</Button>
-                        </div>
                     </div>
                 ) : (
-                    <p className="mt-1 text-sm">{currentValue}</p>
+                    <div
+                        className="group relative cursor-text transition-colors hover:bg-black/5 dark:hover:bg-white/5 border border-transparent rounded-md flex justify-between items-start mt-1 -mx-2 p-2"
+                        onClick={() => setInlineEdit({ field, value: currentValue })}
+                        title="Click to edit"
+                    >
+                        <p className="text-sm leading-relaxed w-full whitespace-pre-wrap m-0 p-0">{currentValue}</p>
+                        <div className="opacity-0 group-hover:opacity-50 transition-opacity text-muted-foreground flex-shrink-0 ml-2">
+                            <Edit2 size={12} />
+                        </div>
+                    </div>
                 )}
             </div>
         );
@@ -573,9 +679,9 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
 
     const renderStandardNode = (node: any, currentDepth: number) => {
         const active = isNodeActive(node.id);
-        const children = graph.nodes.components.filter((c: any) => c.parent === node.id);
-        const incomingNavs = graph.edges?.navigation?.filter((n: any) => n.toScreenId === node.id || n.toComponentId === node.id) || [];
-        const outgoingNavs = graph.edges?.navigation?.filter((n: any) => n.fromComponentId === node.id) || [];
+        const children = graph.structure?.nodes.components.filter((c: any) => c.parent === node.id);
+        const incomingNavs = graph.structure?.edges?.navigation?.filter((n: any) => n.toScreenId === node.id || n.toComponentId === node.id) || [];
+        const outgoingNavs = graph.structure?.edges?.navigation?.filter((n: any) => n.fromComponentId === node.id) || [];
 
         const isScreen = node.parent === 'body';
         const hasChildren = children.length > 0;
@@ -605,35 +711,45 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
             >
                 {/* Node Header (CSS Hover Triggers) */}
                 <div className={`group/header relative font-semibold flex justify-between items-center ${isScreen ? 'p-3 border-b bg-muted/30 text-sm rounded-t-xl' : 'p-2 text-xs hover:bg-muted/30 rounded-t-md'}`}>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 truncate pr-2">
                         {hasChildren && (
-                            <div onClick={toggleExpand} className="cursor-pointer p-1 hover:bg-black/5 dark:hover:bg-white/10 rounded">
+                            <div onClick={toggleExpand} className="cursor-pointer p-1 hover:bg-black/5 dark:hover:bg-white/10 rounded flex-shrink-0">
                                 {isExpanded ? <ChevronDown size={14} className="text-muted-foreground" /> : <ChevronRight size={14} className="text-muted-foreground" />}
                             </div>
                         )}
-                        {node.name}
+                        <span className="truncate">{node.name}</span>
                     </div>
+
+                    {/* Screen/Component Label */}
+                    <span className="text-[10px] uppercase font-bold opacity-50 ml-auto mr-2 flex-shrink-0">
+                        {isScreen ? 'Screen' : 'Component'}
+                    </span>
 
                     {/* Hover Tools - Hidden in Flows or Functionality modes */}
                     {!(mode === 'flows' && activeFlow) && !(showFunctionality && activeFunction) && (
-                        <div className="opacity-0 group-hover/header:opacity-100 transition-opacity flex items-center gap-1 bg-white dark:bg-zinc-900 p-1 rounded absolute right-2 z-10 shadow-sm border border-border/50">
+                        <div className="opacity-0 group-hover/header:opacity-100 transition-opacity flex items-center gap-1 bg-white dark:bg-zinc-900 p-1 rounded absolute right-1 z-10 shadow-sm border border-border/50">
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-600 hover:text-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900" onClick={(e) => { e.stopPropagation(); setSelectedNode({ type: 'NewNode', isScreen: false, parent: node.id, name: '', purpose: '', styles: '', connectedTo: '' }); setExpandedNodes(prev => new Set([...prev, node.id])); }}>
-                                        <Plus size={12} />
+                                        <Plus size={8} />
                                     </Button>
                                 </TooltipTrigger>
                                 <TooltipContent side="top">Add Nested Component</TooltipContent>
                             </Tooltip>
 
                             <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-600 hover:text-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900" onClick={(e) => { e.stopPropagation(); setSelectedNode({ type: isScreen ? 'Screen' : 'Component', ...node }); }}>
-                                <Edit2 size={12} />
+                                <Edit2 size={8} />
                             </Button>
                             <Button variant="ghost" size="icon" className="h-6 w-6 text-red-600 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900" onClick={(e) => { e.stopPropagation(); setNodeToDelete(node); }}>
-                                <Trash2 size={12} />
+                                <Trash2 size={8} />
                             </Button>
                         </div>
                     )}
+                </div>
+
+                {/* Purpose */}
+                <div className="px-3 py-2 text-xs text-muted-foreground border-b border-dashed border-border/50 bg-white/50 dark:bg-zinc-900/50">
+                    {node.purpose || "No description provided."}
                 </div>
 
                 <div className="px-3 py-1 space-y-1 mt-1">
@@ -644,7 +760,9 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                         <div key={i} className="text-[10px] text-emerald-600 font-medium">→ Goes to {getNodeById(n.toScreenId)?.name || 'Unknown'}</div>
                     ))}
                     {showStyles && node.styles && (
-                        <div className="text-[10px] text-amber-600 dark:text-amber-500 font-medium font-mono truncate">Styles: {node.styles}</div>
+                        <div className="text-[10px] text-amber-600 dark:text-amber-500 font-medium font-mono truncate">
+                            Styles: {typeof node.styles === 'object' ? Object.entries(node.styles).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(' | ') : String(node.styles)}
+                        </div>
                     )}
                 </div>
 
@@ -675,12 +793,103 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
         );
     };
 
+    const handleFlowEditSave = () => {
+        if (!flowDraft?.name) {
+            setEditingFlowTitle(false);
+            setEditingFlowDesc(false);
+            return;
+        }
+        setGraph((prev: any) => {
+            const next = JSON.parse(JSON.stringify(prev));
+            const flowIndex = next.structure.edges.flows.findIndex((f: any) => f.name === activeFlow);
+            if (flowIndex > -1) {
+                next.structure.edges.flows[flowIndex].name = flowDraft.name;
+                next.structure.edges.flows[flowIndex].description = flowDraft.description;
+            }
+            return next;
+        });
+        if (flowDraft.name !== activeFlow) setActiveFlow(flowDraft.name);
+        setEditingFlowTitle(false);
+        setEditingFlowDesc(false);
+    };
+
+    const handleFlowKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            (e.target as HTMLElement).blur(); // Trigger the blur event to save
+        } else if (e.key === 'Escape') {
+            setEditingFlowTitle(false);
+            setEditingFlowDesc(false);
+            setFlowDraft(null);
+        }
+    };
+
+    const handleFuncEditSave = () => {
+        if (!funcDraft?.name) {
+            setEditingFuncTitle(false);
+            setEditingFuncDesc(false);
+            return;
+        }
+        setGraph((prev: any) => {
+            const next = JSON.parse(JSON.stringify(prev));
+            const funcIndex = next.structure.functionalities.findIndex((f: any) => f.name === activeFunction);
+            if (funcIndex > -1) {
+                next.structure.functionalities[funcIndex].name = funcDraft.name;
+                next.structure.functionalities[funcIndex].description = funcDraft.description;
+            }
+            return next;
+        });
+        if (funcDraft.name !== activeFunction) setActiveFunction(funcDraft.name);
+        setEditingFuncTitle(false);
+        setEditingFuncDesc(false);
+    };
+
+    const handleFuncKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            (e.target as HTMLElement).blur();
+        } else if (e.key === 'Escape') {
+            setEditingFuncTitle(false);
+            setEditingFuncDesc(false);
+            setFuncDraft(null);
+        }
+    };
+
     const renderFlowSequence = () => {
-        const flow = graph.edges?.flows?.find((f: any) => f.name === activeFlow);
-        if (!flow || !flow.steps) return <div className="text-muted-foreground m-auto">Select a flow to view sequence.</div>;
+        const flow = graph.structure?.edges?.flows?.find((f: any) => f.name === activeFlow);
+        if (!flow) return <div className="text-muted-foreground m-auto">Select a flow to view sequence.</div>;
 
         // USE LIVE PREVIEW IF DRAGGING, OTHERWISE USE GRAPH DATA
-        const displaySteps = liveSteps || flow.steps;
+        const displaySteps = liveSteps || flow.steps || [];
+
+        // --- NEW: EMPTY STATE FOR 0 STEPS ---
+        if (displaySteps.length === 0) {
+            return (
+                <div className="w-full h-full flex flex-col items-center justify-center" onDragOver={handleDragOverContainer}>
+                    <div className="flex flex-col items-center text-muted-foreground animate-in zoom-in-95 duration-300">
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    size="icon"
+                                    variant="outline"
+                                    className="h-16 w-16 rounded-full border-dashed border-2 border-primary text-primary hover:bg-primary hover:text-white hover:border-solid transition-all bg-background shadow-sm mb-4"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setInsertFlowContext({ index: -1, selectedScreen: '', selectedComponent: '' });
+                                        setSelectedNode({ type: 'InsertFlowStep' });
+                                    }}
+                                >
+                                    <Plus size={32} strokeWidth={2} />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Add a flow node here</TooltipContent>
+                        </Tooltip>
+                        <p className="text-sm font-medium text-foreground">Flow is empty</p>
+                        <p className="text-xs mt-1">Click the button to add your first screen</p>
+                    </div>
+                </div>
+            );
+        }
 
         const rows = [];
         for (let i = 0; i < displaySteps.length; i += itemsPerRow) {
@@ -688,8 +897,8 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
         }
 
         return (
-            <div ref={flowContainerRef} className="w-full h-full flex justify-center overflow-y-auto py-12 px-4">
-                <div className="flex flex-col inline-flex">
+            <div ref={flowContainerRef} className="w-full h-full flex justify-center overflow-y-auto pt-12 px-4" onDragOver={handleDragOverContainer}>
+                <div className="flex flex-col inline-flex pb-12">
                     {rows.map((rowSteps: string[], rowIndex: number) => {
                         const isEven = rowIndex % 2 === 0;
                         const isLastRow = rowIndex === rows.length - 1;
@@ -703,27 +912,31 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
 
                                         const absoluteIndex = rowIndex * itemsPerRow + colIndex; // Calculate actual index
                                         const isLastInRow = colIndex === rowSteps.length - 1;
-                                        const incomingNavs = showNav ? (graph.edges?.navigation?.filter((n: any) => n.toScreenId === node.id || n.toComponentId === node.id) || []) : [];
-                                        const outgoingNavs = showNav ? (graph.edges?.navigation?.filter((n: any) => n.fromComponentId === node.id) || []) : [];
+                                        const incomingNavs = showNav ? (graph.structure?.edges?.navigation?.filter((n: any) => n.toScreenId === node.id || n.toComponentId === node.id) || []) : [];
+                                        const outgoingNavs = showNav ? (graph.structure?.edges?.navigation?.filter((n: any) => n.fromComponentId === node.id) || []) : [];
 
                                         return (
                                             <React.Fragment key={`${stepId}-${colIndex}-${absoluteIndex}`}>
                                                 {/* 1. START CAP (Before the very first node) */}
                                                 {absoluteIndex === 0 && (
                                                     <div className="flex-shrink-0 flex items-center justify-center w-16">
-                                                        <Button
-                                                            size="icon"
-                                                            variant="outline"
-                                                            className="h-8 w-8 rounded-full border-dashed border-2 border-primary text-primary hover:bg-primary hover:text-white hover:border-solid transition-all z-10 bg-background flex-shrink-0"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                // Passing -1 means it will insert at index 0 (the very beginning)
-                                                                setInsertFlowContext({ index: -1, selectedScreen: '', selectedComponent: '' });
-                                                                setSelectedNode({ type: 'InsertFlowStep' });
-                                                            }}
-                                                        >
-                                                            <Plus size={16} strokeWidth={3} />
-                                                        </Button>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Button
+                                                                    size="icon"
+                                                                    variant="outline"
+                                                                    className="h-8 w-8 rounded-full border-dashed border-2 border-primary text-primary hover:bg-primary hover:text-white hover:border-solid transition-all z-10 bg-background flex-shrink-0"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setInsertFlowContext({ index: -1, selectedScreen: '', selectedComponent: '' });
+                                                                        setSelectedNode({ type: 'InsertFlowStep' });
+                                                                    }}
+                                                                >
+                                                                    <Plus size={16} strokeWidth={3} />
+                                                                </Button>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>Add a flow node here</TooltipContent>
+                                                        </Tooltip>
                                                         <div className="h-px flex-1 border-t-2 border-dashed border-primary/50"></div>
                                                     </div>
                                                 )}
@@ -744,12 +957,20 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                                         {node.name}
                                                         <span className="text-[10px] uppercase font-bold opacity-50">{node.isScreen ? 'Screen' : 'Component'}</span>
 
-                                                        {hoveredNodeId === node.id && !activeFlow && (
-                                                            <div className="flex items-center gap-1 bg-white/80 dark:bg-zinc-900/80 p-1 rounded absolute right-2 z-10">
-                                                                <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-600 hover:text-blue-700 hover:bg-blue-100" onClick={(e) => { e.stopPropagation(); setSelectedNode({ type: node.isScreen ? 'Screen' : 'Component', ...node }); }}>
-                                                                    <Edit2 size={12} />
-                                                                </Button>
-                                                                <Button variant="ghost" size="icon" className="h-6 w-6 text-red-600 hover:text-red-700 hover:bg-red-100" onClick={(e) => { e.stopPropagation(); setNodeToDelete(node); }}>
+                                                        {/* Only show delete if NOT dragging */}
+                                                        {hoveredNodeId === node.id && draggedFlowIndex === null && (
+                                                            <div className="flex items-center gap-1 bg-white/90 dark:bg-zinc-900/90 p-0 rounded absolute right-1 top-1 z-10 shadow-sm border border-border/50">
+                                                                <Button variant="ghost" size="icon" className="h-6 w-6 text-red-600 rounded hover:text-red-700 hover:bg-red-100" onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setGraph((prev: any) => {
+                                                                        const next = JSON.parse(JSON.stringify(prev));
+                                                                        const flowIndex = next.structure.edges.flows.findIndex((f: any) => f.name === activeFlow);
+                                                                        if (flowIndex > -1) {
+                                                                            next.structure.edges.flows[flowIndex].steps.splice(absoluteIndex, 1);
+                                                                        }
+                                                                        return next;
+                                                                    });
+                                                                }}>
                                                                     <Trash2 size={12} />
                                                                 </Button>
                                                             </div>
@@ -760,7 +981,7 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                                         <div className="px-3 pb-3 pt-1 space-y-1 border-t border-dashed bg-slate-50 dark:bg-zinc-800/50 rounded-b-xl">
                                                             {showNav && incomingNavs.length > 0 && incomingNavs.map((n: any, i: number) => <div key={i} className="text-[10px] text-blue-600 font-medium truncate">← {getNodeById(n.fromComponentId)?.name || 'Unknown'}</div>)}
                                                             {showNav && outgoingNavs.length > 0 && outgoingNavs.map((n: any, i: number) => <div key={i} className="text-[10px] text-emerald-600 font-medium truncate">→ {getNodeById(n.toScreenId)?.name || 'Unknown'}</div>)}
-                                                            {showStyles && node.styles && <div className="text-[10px] text-amber-600 dark:text-amber-500 font-medium font-mono truncate mt-1">Sty: {node.styles}</div>}
+                                                            {showStyles && node.styles && <div className="text-[10px] text-amber-600 dark:text-amber-500 font-medium font-mono truncate mt-1">Sty: {typeof node.styles === 'object' ? Object.entries(node.styles).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(' | ') : String(node.styles)}</div>}
                                                         </div>
                                                     )}
                                                 </div>
@@ -772,43 +993,47 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                                         <div className="h-px flex-1 bg-border"></div>
 
                                                         {/* Hover Plus Button */}
-                                                        <Button
-                                                            size="icon"
-                                                            variant="outline"
-                                                            className="absolute h-6 w-6 rounded-full opacity-0 group-hover/arrow:opacity-100 transition-opacity bg-background border-primary text-primary hover:bg-primary hover:text-white"
-                                                            onClick={() => {
-                                                                setInsertFlowContext({ index: absoluteIndex, selectedScreen: '', selectedComponent: '' });
-                                                                setSelectedNode({ type: 'InsertFlowStep' });
-                                                            }}
-                                                        >
-                                                            <Plus size={12} strokeWidth={3} />
-                                                        </Button>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Button
+                                                                    size="icon"
+                                                                    variant="outline"
+                                                                    className="absolute h-6 w-6 rounded-full opacity-0 group-hover/arrow:opacity-100 transition-opacity bg-background border-primary text-primary hover:bg-primary hover:text-white"
+                                                                    onClick={() => {
+                                                                        setInsertFlowContext({ index: absoluteIndex, selectedScreen: '', selectedComponent: '' });
+                                                                        setSelectedNode({ type: 'InsertFlowStep' });
+                                                                    }}
+                                                                >
+                                                                    <Plus size={12} strokeWidth={3} />
+                                                                </Button>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>Add a flow node here</TooltipContent>
+                                                        </Tooltip>
                                                     </div>
                                                 )}
 
                                                 {/* 2. END CAP (After the very last node) */}
                                                 {absoluteIndex === flow.steps.length - 1 && (
                                                     <div className="flex-shrink-0 flex items-center justify-center w-16">
-
-                                                        {/* Render line BEFORE the button if it's an even row (going right) */}
                                                         {isEven && <div className="h-px flex-1 border-t-2 border-dashed border-primary/50"></div>}
-
-                                                        <Button
-                                                            size="icon"
-                                                            variant="outline"
-                                                            className="h-8 w-8 rounded-full border-dashed border-2 border-primary text-primary hover:bg-primary hover:text-white hover:border-solid transition-all z-10 bg-background flex-shrink-0"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                setInsertFlowContext({ index: absoluteIndex, selectedScreen: '', selectedComponent: '' });
-                                                                setSelectedNode({ type: 'InsertFlowStep' });
-                                                            }}
-                                                        >
-                                                            <Plus size={16} strokeWidth={3} />
-                                                        </Button>
-
-                                                        {/* Render line AFTER the button if it's an odd row (going left) */}
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Button
+                                                                    size="icon"
+                                                                    variant="outline"
+                                                                    className="h-8 w-8 rounded-full border-dashed border-2 border-primary text-primary hover:bg-primary hover:text-white hover:border-solid transition-all z-10 bg-background flex-shrink-0"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setInsertFlowContext({ index: absoluteIndex, selectedScreen: '', selectedComponent: '' });
+                                                                        setSelectedNode({ type: 'InsertFlowStep' });
+                                                                    }}
+                                                                >
+                                                                    <Plus size={16} strokeWidth={3} />
+                                                                </Button>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>Add a flow node here</TooltipContent>
+                                                        </Tooltip>
                                                         {!isEven && <div className="h-px flex-1 border-t-2 border-dashed border-primary/50"></div>}
-
                                                     </div>
                                                 )}
                                             </React.Fragment>
@@ -824,24 +1049,31 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                             <div className="w-px h-6 bg-border"></div>
 
                                             {/* Hover Plus Button */}
-                                            <Button
-                                                size="icon"
-                                                variant="outline"
-                                                className="absolute top-[18px] h-6 w-6 rounded-full opacity-0 group-hover/arrow:opacity-100 transition-opacity bg-background border-primary text-primary hover:bg-primary hover:text-white"
-                                                onClick={() => {
-                                                    const lastIndexInRow = rowIndex * itemsPerRow + rowSteps.length - 1;
-                                                    setInsertFlowContext({ index: lastIndexInRow, selectedScreen: '', selectedComponent: '' });
-                                                    setSelectedNode({ type: 'InsertFlowStep' });
-                                                }}
-                                            >
-                                                <Plus size={12} strokeWidth={3} />
-                                            </Button>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <Button
+                                                        size="icon"
+                                                        variant="outline"
+                                                        className="absolute top-[18px] h-6 w-6 rounded-full opacity-0 group-hover/arrow:opacity-100 transition-opacity bg-background border-primary text-primary hover:bg-primary hover:text-white"
+                                                        onClick={() => {
+                                                            const lastIndexInRow = rowIndex * itemsPerRow + rowSteps.length - 1;
+                                                            setInsertFlowContext({ index: lastIndexInRow, selectedScreen: '', selectedComponent: '' });
+                                                            setSelectedNode({ type: 'InsertFlowStep' });
+                                                        }}
+                                                    >
+                                                        <Plus size={12} strokeWidth={3} />
+                                                    </Button>
+                                                </TooltipTrigger>
+                                                <TooltipContent>Add a flow node here</TooltipContent>
+                                            </Tooltip>
                                         </div>
                                     </div>
                                 )}
                             </React.Fragment>
                         );
                     })}
+                    {/* EXPLICIT SPACER: Forces the browser to respect bottom scroll space */}
+                    <div className="h-12 w-full flex-shrink-0" />
                 </div>
             </div>
         );
@@ -859,6 +1091,54 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                         <div className="flex justify-end gap-3">
                             <Button variant="outline" onClick={() => setNodeToDelete(null)}>Cancel</Button>
                             <Button variant="destructive" onClick={handleDeleteNode}>Delete</Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal for Flow Deletion Confirmation */}
+            {flowToDelete && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-zinc-900 p-6 rounded-xl shadow-xl max-w-sm w-full border">
+                        <h3 className="text-lg font-bold mb-2">Delete Flow?</h3>
+                        <p className="text-sm text-muted-foreground mb-6">Are you sure you want to delete the flow "{flowToDelete}"?</p>
+                        <div className="flex justify-end gap-3">
+                            <Button variant="outline" onClick={() => setFlowToDelete(null)}>Cancel</Button>
+                            <Button variant="destructive" onClick={() => {
+                                setGraph((prev: any) => {
+                                    const next = JSON.parse(JSON.stringify(prev));
+                                    next.structure.edges.flows = next.structure.edges.flows.filter((f: any) => f.name !== flowToDelete);
+                                    return next;
+                                });
+                                // Automatically switch to another flow if available
+                                setActiveFlow(graph.structure?.edges?.flows?.find((f: any) => f.name !== flowToDelete)?.name || null);
+                                setFlowToDelete(null);
+                                setSelectedNode(null);
+                            }}>Delete</Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal for Functionality Deletion Confirmation */}
+            {functionToDelete && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-zinc-900 p-6 rounded-xl shadow-xl max-w-sm w-full border">
+                        <h3 className="text-lg font-bold mb-2">Delete Functionality?</h3>
+                        <p className="text-sm text-muted-foreground mb-6">Are you sure you want to delete "{functionToDelete}"?</p>
+                        <div className="flex justify-end gap-3">
+                            <Button variant="outline" onClick={() => setFunctionToDelete(null)}>Cancel</Button>
+                            <Button variant="destructive" onClick={() => {
+                                setGraph((prev: any) => {
+                                    const next = JSON.parse(JSON.stringify(prev));
+                                    next.structure.functionalities = next.structure.functionalities.filter((f: any) => f.name !== functionToDelete);
+                                    return next;
+                                });
+                                // Automatically switch to another functionality if available
+                                const remaining = graph.structure?.functionalities?.filter((f: any) => f.name !== functionToDelete);
+                                setActiveFunction(remaining?.length > 0 ? remaining[0].name : null);
+                                setFunctionToDelete(null);
+                            }}>Delete</Button>
                         </div>
                     </div>
                 </div>
@@ -885,17 +1165,43 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                         {/* Dropdowns Group with Truncation Logic */}
                         <div className="flex items-center gap-2 min-w-0">
                             {mode === 'flows' && (
-                                <select
-                                    className="bg-muted/50 border border-border rounded-md px-2 py-1 text-xs outline-none font-medium w-full max-w-[350px] truncate"
-                                    value={activeFlow || ""}
-                                    onChange={(e) => setActiveFlow(e.target.value)}
-                                >
-                                    {graph.edges?.flows?.map((f: any) => (
-                                        <option key={f.name} value={f.name}>
-                                            {f.name.length > 50 ? `${f.name.substring(0, 45)}...` : f.name}
-                                        </option>
-                                    ))}
-                                </select>
+                                <div className="flex items-center gap-2">
+                                    <select
+                                        className="bg-muted/50 border border-border rounded-md px-2 py-1 text-xs outline-none font-medium w-full max-w-[350px] truncate"
+                                        value={activeFlow || ""}
+                                        onChange={(e) => setActiveFlow(e.target.value)}
+                                    >
+                                        <option value="" disabled>Select a flow...</option>
+                                        {graph.structure?.edges?.flows?.map((f: any) => (
+                                            <option key={f.name} value={f.name}>
+                                                {f.name.length > 50 ? `${f.name.substring(0, 45)}...` : f.name}
+                                            </option>
+                                        ))}
+                                    </select>
+
+                                    <Button variant="outline" size="sm" className="h-7 text-xs border-dashed text-primary hover:bg-primary hover:text-white" onClick={() => {
+                                        // 1. Generate a default name based on current flow count
+                                        const currentFlows = graph.structure?.edges?.flows || [];
+                                        const newFlowName = `New Flow ${currentFlows.length + 1}`;
+
+                                        // 2. Instantly add the blank flow to the graph data
+                                        setGraph((prev: any) => {
+                                            const next = JSON.parse(JSON.stringify(prev));
+                                            if (!next.structure.edges) next.structure.edges = {};
+                                            if (!next.structure.edges.flows) next.structure.edges.flows = [];
+                                            next.structure.edges.flows.push({ name: newFlowName, description: '', steps: [] });
+                                            return next;
+                                        });
+
+                                        // 3. Set it as active, clear the sidebar, and open the inline editor
+                                        setActiveFlow(newFlowName);
+                                        setFlowDraft({ name: newFlowName, description: '' });
+                                        setEditingFlowTitle(true);
+                                        setSelectedNode(null);
+                                    }}>
+                                        <Plus size={12} className="mr-1" /> New
+                                    </Button>
+                                </div>
                             )}
                             {mode === 'structure' && showFunctionality && (
                                 <div className="flex items-center gap-2">
@@ -904,7 +1210,7 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                         value={activeFunction || ""}
                                         onChange={(e) => setActiveFunction(e.target.value)}
                                     >
-                                        {graph.metadata?.functionalities?.map((f: any) => (
+                                        {graph.structure?.functionalities?.map((f: any) => (
                                             <option key={f.name} value={f.name}>
                                                 {f.name.length > 50 ? `${f.name.substring(0, 45)}...` : f.name}
                                             </option>
@@ -916,7 +1222,22 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                                 variant="outline"
                                                 size="sm"
                                                 className="h-7 text-xs border-dashed text-primary hover:bg-primary hover:text-white"
-                                                onClick={() => setSelectedNode({ type: 'FunctionalityForm', isNew: true, name: '', description: '', relatedNodes: [] })}
+                                                onClick={() => {
+                                                    const currentFuncs = graph.structure?.functionalities || [];
+                                                    const newFuncName = `New Functionality ${currentFuncs.length + 1}`;
+
+                                                    setGraph((prev: any) => {
+                                                        const next = JSON.parse(JSON.stringify(prev));
+                                                        if (!next.structure.functionalities) next.structure.functionalities = [];
+                                                        next.structure.functionalities.push({ name: newFuncName, description: '', relatedNodes: [] });
+                                                        return next;
+                                                    });
+
+                                                    setActiveFunction(newFuncName);
+                                                    setFuncDraft({ name: newFuncName, description: '' });
+                                                    setEditingFuncTitle(true);
+                                                    setSelectedNode(null); // Keeps sidebar closed
+                                                }}
                                             >
                                                 <Plus size={12} className="mr-1" /> New
                                             </Button>
@@ -930,12 +1251,16 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                         </div>
                         {/* Checkboxes Group - Used shorter labels to save space */}
                         <div className="flex items-center gap-3 text-[11px] font-medium text-muted-foreground border-r pr-4 h-6 flex-shrink-0">
-                            <label className="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors">
-                                <input type="checkbox" checked={showNav} onChange={(e) => setShowNav(e.target.checked)} className="rounded text-primary focus:ring-primary h-3.5 w-3.5" /> Nav
-                            </label>
-                            <label className="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors">
-                                <input type="checkbox" checked={showStyles} onChange={(e) => setShowStyles(e.target.checked)} className="rounded text-primary focus:ring-primary h-3.5 w-3.5" /> Styles
-                            </label>
+                            {mode !== 'flows' && (
+                                <>
+                                    <label className="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors">
+                                        <input type="checkbox" checked={showNav} onChange={(e) => setShowNav(e.target.checked)} className="rounded text-primary focus:ring-primary h-3.5 w-3.5" /> Nav
+                                    </label>
+                                    <label className="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors">
+                                        <input type="checkbox" checked={showStyles} onChange={(e) => setShowStyles(e.target.checked)} className="rounded text-primary focus:ring-primary h-3.5 w-3.5" /> Styles
+                                    </label>
+                                </>
+                            )}
                             {mode === 'structure' && (
                                 <label className="flex items-center gap-1.5 cursor-pointer hover:text-foreground transition-colors">
                                     <input type="checkbox" checked={showFunctionality} onChange={(e) => handleToggleFunctionality(e.target.checked)} className="rounded text-primary focus:ring-primary h-3.5 w-3.5" /> Functionality
@@ -968,34 +1293,83 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
 
                             {/* Personas Grid */}
                             <div>
-                                <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-4 mb-4">
                                     <h2 className="text-xl font-bold">Target Personas</h2>
                                     <Button variant="outline" size="sm" onClick={() => openPersonaEditor()}>+ Add Persona</Button>
                                 </div>
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                    {graph.strategy?.personas?.map((p: any, i: number) => (
-                                        <div
-                                            key={i}
-                                            onMouseEnter={() => setHoveredNodeId(`persona-${i}`)}
-                                            onMouseLeave={() => setHoveredNodeId(null)}
-                                            className={`p-5 border rounded-xl bg-white dark:bg-zinc-900 shadow-sm transition-all relative ${selectedNode?.type === 'PersonaForm' && personaDraft?.index === i ? 'ring-2 ring-primary border-primary' : 'border-border hover:border-primary/50'}`}
-                                        >
-                                            <div className="flex justify-between items-start mb-3">
-                                                <h3 className="font-bold text-lg text-primary">{p.name}</h3>
-                                                {hoveredNodeId === `persona-${i}` && (
-                                                    <div className="flex gap-1 absolute right-3 top-3 bg-white/90 p-1 rounded">
-                                                        <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-600 hover:bg-blue-100" onClick={(e) => { e.stopPropagation(); openPersonaEditor(p, i); }}><Edit2 size={12} /></Button>
-                                                        <Button variant="ghost" size="icon" className="h-6 w-6 text-red-600 hover:bg-red-100" onClick={(e) => { e.stopPropagation(); deletePersona(i); }}><Trash2 size={12} /></Button>
+                                    {graph.strategy?.personas?.map((p: any, i: number) => {
+                                        // --- 1. FORMAT RAW DATA FOR DISPLAY ---
+                                        let displayAge = p.demographics?.age || 'Unknown';
+                                        if (typeof displayAge === 'number') {
+                                            if (displayAge < 18) displayAge = 'Under 18';
+                                            else if (displayAge <= 24) displayAge = '18-24';
+                                            else if (displayAge <= 34) displayAge = '25-34';
+                                            else if (displayAge <= 44) displayAge = '35-44';
+                                            else if (displayAge <= 54) displayAge = '45-54';
+                                            else if (displayAge <= 64) displayAge = '55-64';
+                                            else displayAge = '65+';
+                                        }
+
+                                        let displayIncome = p.demographics?.annual_income || 'Unknown';
+                                        if (typeof displayIncome === 'number') {
+                                            if (displayIncome < 25000) displayIncome = 'Under $25k';
+                                            else if (displayIncome <= 50000) displayIncome = '$25k-$50k';
+                                            else if (displayIncome <= 75000) displayIncome = '$50k-$75k';
+                                            else if (displayIncome <= 100000) displayIncome = '$75k-$100k';
+                                            else if (displayIncome <= 150000) displayIncome = '$100k-$150k';
+                                            else displayIncome = '$150k+';
+                                        }
+
+                                        let displayInternet = p.technicalProfile?.internet_usage || 'Unknown';
+                                        if (typeof displayInternet === 'number') {
+                                            if (displayInternet <= 10) displayInternet = '0-10 hrs/week';
+                                            else if (displayInternet <= 20) displayInternet = '10-20 hrs/week';
+                                            else if (displayInternet <= 40) displayInternet = '20-40 hrs/week';
+                                            else displayInternet = '40+ hrs/week';
+                                        }
+
+                                        // --- 2. RENDER THE CARD ---
+                                        return (
+                                            <div
+                                                key={i}
+                                                onMouseEnter={() => setHoveredNodeId(`persona-${i}`)}
+                                                onMouseLeave={() => setHoveredNodeId(null)}
+                                                className={`p-5 border rounded-xl bg-white dark:bg-zinc-900 shadow-sm transition-all relative ${selectedNode?.type === 'PersonaForm' && personaDraft?.index === i ? 'ring-2 ring-primary border-primary' : 'border-border hover:border-primary/50'}`}
+                                            >
+                                                <div className="flex justify-between items-start mb-3">
+                                                    <h3 className="font-bold text-lg text-primary">{p.name}</h3>
+                                                    {hoveredNodeId === `persona-${i}` && (
+                                                        <div className="flex gap-1 absolute right-3 top-3 bg-white/90 p-1 rounded shadow-sm border border-border/50">
+                                                            <Button variant="ghost" size="icon" className="h-6 w-6 text-blue-600 hover:bg-blue-100" onClick={(e) => { e.stopPropagation(); openPersonaEditor(p, i); }}><Edit2 size={12} /></Button>
+                                                            <Button variant="ghost" size="icon" className="h-6 w-6 text-red-600 hover:bg-red-100" onClick={(e) => { e.stopPropagation(); deletePersona(i); }}><Trash2 size={12} /></Button>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div className="text-sm space-y-3">
+                                                    <div>
+                                                        <span className="font-semibold text-xs uppercase text-muted-foreground block mb-1">Demographics</span>
+                                                        {/* Make the display explicit and well-formatted */}
+                                                        <p className="text-xs text-foreground/90 leading-relaxed">
+                                                            <span className="font-medium">{p.demographics?.gender}</span>, Age <span className="font-medium">{displayAge}</span> • {p.demographics?.education_level} • {p.demographics?.marital_status} • <span className="font-medium">{displayIncome}</span>
+                                                        </p>
                                                     </div>
-                                                )}
+                                                    <div>
+                                                        <span className="font-semibold text-xs uppercase text-muted-foreground block mb-1">Technical Profile</span>
+                                                        {/* Explicitly state what the internet hours mean */}
+                                                        <p className="text-xs text-foreground/90 leading-relaxed">
+                                                            <span className="font-medium">{p.technicalProfile?.expertise_level}</span> Expertise • Internet Usage: <span className="font-medium">{displayInternet}</span> • Top Sites: <span className="italic">{p.technicalProfile?.favourite_sites}</span>
+                                                        </p>
+                                                    </div>
+                                                    <div>
+                                                        <span className="font-semibold text-xs uppercase text-muted-foreground block mb-1">Knowledge Profile</span>
+                                                        <p className="text-xs text-foreground/90 leading-relaxed">{p.knowledgeProfile}</p>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div className="text-sm space-y-3">
-                                                <div><span className="font-semibold text-xs uppercase text-muted-foreground">Demographics</span><p>{p.demographics}</p></div>
-                                                <div><span className="font-semibold text-xs uppercase text-muted-foreground">Technical Profile</span><p>{p.technicalProfile}</p></div>
-                                                <div><span className="font-semibold text-xs uppercase text-muted-foreground">Knowledge Profile</span><p>{p.knowledgeProfile}</p></div>
-                                            </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </div>
 
@@ -1003,40 +1377,87 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                             <div className="p-6 border rounded-xl bg-white dark:bg-zinc-900 shadow-sm border-border">
                                 <h2 className="text-xl font-bold mb-5 flex items-center">Out of Scope Constraints</h2>
                                 <div className="space-y-2">
-                                    {graph.scope?.outOfScope?.map((item: string, i: number) => {
+                                    {graph.strategy?.outOfScope?.map((item: string, i: number) => {
                                         const isEditing = inlineEdit?.field === 'constraint' && inlineEdit.index === i;
                                         return isEditing ? (
-                                            <div key={item} className="p-3 border rounded-lg bg-slate-50 dark:bg-zinc-800 space-y-2">
-                                                <textarea className="w-full bg-white dark:bg-zinc-900 border rounded text-sm p-2 focus:ring-2 focus:ring-primary" value={inlineEdit.value} onChange={e => setInlineEdit({ ...inlineEdit, value: e.target.value })} autoFocus />
-                                                <div className="flex justify-end gap-2">
-                                                    <Button size="sm" variant="outline" onClick={() => setInlineEdit(null)}>Cancel</Button>
-                                                    <Button size="sm" onClick={saveInlineEdit}>Save</Button>
-                                                </div>
+                                            <div key={item} className="relative p-2 -mx-2 border border-primary/50 rounded-lg bg-white dark:bg-zinc-900 shadow-sm flex items-start">
+                                                <textarea
+                                                    className="w-full bg-transparent border-none text-sm leading-relaxed p-0 pr-8 focus:ring-0 outline-none resize-none overflow-hidden block m-0"
+                                                    value={inlineEdit.value}
+                                                    rows={1}
+                                                    onChange={e => {
+                                                        setInlineEdit({ ...inlineEdit, value: e.target.value });
+                                                        e.target.style.height = 'auto';
+                                                        e.target.style.height = `${e.target.scrollHeight}px`;
+                                                    }}
+                                                    onFocus={e => {
+                                                        e.target.style.height = 'auto';
+                                                        e.target.style.height = `${e.target.scrollHeight}px`;
+                                                    }}
+                                                    onBlur={saveInlineEdit}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                                            e.preventDefault();
+                                                            saveInlineEdit();
+                                                        } else if (e.key === 'Escape') {
+                                                            setInlineEdit(null);
+                                                        }
+                                                    }}
+                                                    autoFocus
+                                                />
                                             </div>
                                         ) : (
                                             <div
                                                 key={item}
-                                                onMouseEnter={() => setHoveredNodeId(`constraint-${i}`)}
-                                                onMouseLeave={() => setHoveredNodeId(null)}
-                                                className="flex justify-between items-start p-3 border rounded-lg bg-white dark:bg-zinc-900 shadow-sm hover:border-primary/50 transition-all relative"
+                                                className="group relative flex justify-between items-start p-2 -mx-2 rounded-lg cursor-text hover:bg-black/5 dark:hover:bg-white/5 border border-transparent transition-colors"
+                                                onClick={() => setInlineEdit({ field: 'constraint', value: item, index: i })}
+                                                title="Click to edit constraint"
                                             >
-                                                <p className="text-sm pr-16">{item}</p>
-                                                {hoveredNodeId === `constraint-${i}` && (
-                                                    <div className="flex gap-1 absolute right-2 top-2 bg-white p-1 rounded">
-                                                        <Button size="icon" variant="ghost" className="h-6 w-6 text-blue-600 hover:bg-blue-100" onClick={() => setInlineEdit({ field: 'constraint', value: item, index: i })}><Edit2 size={12} /></Button>
-                                                        <Button size="icon" variant="ghost" className="h-6 w-6 text-red-600 hover:bg-red-100" onClick={() => deleteConstraint(i)}><Trash2 size={12} /></Button>
-                                                    </div>
-                                                )}
+                                                <p className="text-sm leading-relaxed text-muted-foreground w-full pr-8 m-0 p-0 whitespace-pre-wrap">{item}</p>
+                                                <div className="absolute right-2 top-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                                                    <Button
+                                                        size="icon"
+                                                        variant="ghost"
+                                                        className="h-6 w-6 text-red-600 hover:bg-red-100"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation(); // Stops it from opening the editor when you click trash!
+                                                            deleteConstraint(i);
+                                                        }}
+                                                        title="Delete constraint"
+                                                    >
+                                                        <Trash2 size={12} />
+                                                    </Button>
+                                                </div>
                                             </div>
                                         );
                                     })}
                                     {inlineEdit?.field === 'constraint' && inlineEdit.index === undefined ? (
-                                        <div className="p-3 border rounded-lg bg-slate-50 dark:bg-zinc-800 space-y-2 mt-4">
-                                            <textarea className="w-full bg-white dark:bg-zinc-900 border rounded text-sm p-2 focus:ring-2 focus:ring-primary" placeholder="New constraint..." value={inlineEdit.value} onChange={e => setInlineEdit({ ...inlineEdit, value: e.target.value })} autoFocus />
-                                            <div className="flex justify-end gap-2">
-                                                <Button size="sm" variant="outline" onClick={() => setInlineEdit(null)}>Cancel</Button>
-                                                <Button size="sm" onClick={saveInlineEdit}>Add</Button>
-                                            </div>
+                                        <div className="relative p-2 -mx-2 mt-1 border border-primary/50 rounded-lg bg-white dark:bg-zinc-900 shadow-sm flex items-start">
+                                            <textarea
+                                                className="w-full bg-transparent border-none text-sm leading-relaxed p-0 pr-8 focus:ring-0 outline-none resize-none overflow-hidden block m-0"
+                                                placeholder="New constraint..."
+                                                value={inlineEdit.value}
+                                                rows={1}
+                                                onChange={e => {
+                                                    setInlineEdit({ ...inlineEdit, value: e.target.value });
+                                                    e.target.style.height = 'auto';
+                                                    e.target.style.height = `${e.target.scrollHeight}px`;
+                                                }}
+                                                onFocus={e => {
+                                                    e.target.style.height = 'auto';
+                                                    e.target.style.height = `${e.target.scrollHeight}px`;
+                                                }}
+                                                onBlur={saveInlineEdit}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                                        e.preventDefault();
+                                                        saveInlineEdit();
+                                                    } else if (e.key === 'Escape') {
+                                                        setInlineEdit(null);
+                                                    }
+                                                }}
+                                                autoFocus
+                                            />
                                         </div>
                                     ) : (
                                         <Button variant="outline" size="sm" className="mt-4 w-full border-dashed" onClick={() => setInlineEdit({ field: 'constraint', value: '' })}>+ Add Constraint</Button>
@@ -1048,44 +1469,142 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
 
                     {/* Structure / Flows Rendering */}
                     {mode === 'flows' && (
-                        <div className="w-full flex-1 border-2 border-dashed border-border/60 rounded-xl bg-white/50 dark:bg-zinc-900/50 flex overflow-hidden">
-                            {renderFlowSequence()}
+                        <div className="flex flex-col w-full h-full relative">
+                            {activeFlow && (
+                                <>
+                                    {/* --- STICKY FLOW HEADER & SEAMLESS INLINE EDITING --- */}
+                                    <div
+                                        className="sticky -top-8 z-40 -mt-8 -mx-8 px-8 pt-6 pb-4 mb-8 bg-slate-50/95 dark:bg-zinc-950/95 backdrop-blur-md border-b border-border/50 flex flex-col items-center animate-in fade-in slide-in-from-top-2"
+                                        onBlur={(e) => {
+                                            // If focus moves outside the header entirely, save!
+                                            if (!e.currentTarget.contains(e.relatedTarget)) {
+                                                if (editingFlowTitle || editingFlowDesc) handleFlowEditSave();
+                                            }
+                                        }}
+                                    >
+                                        <div className="flex items-center gap-3 mb-2">
+                                            {/* Decoupled Title Edit */}
+                                            {editingFlowTitle ? (
+                                                <input
+                                                    className="bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full outline-none focus:ring-2 focus:ring-primary/50 min-w-[250px] text-center border-transparent"
+                                                    value={flowDraft?.name || ''}
+                                                    onChange={(e) => setFlowDraft(prev => prev ? { ...prev, name: e.target.value } : null)}
+                                                    onKeyDown={handleFlowKeyDown}
+                                                    autoFocus
+                                                />
+                                            ) : (
+                                                <div
+                                                    className="group flex items-center gap-2 cursor-text"
+                                                    onClick={() => {
+                                                        const flow = graph.structure?.edges?.flows?.find((f: any) => f.name === activeFlow);
+                                                        setFlowDraft({ name: flow.name, description: flow.description || '' });
+                                                        setEditingFlowTitle(true);
+                                                    }}
+                                                    title="Click to edit title"
+                                                >
+                                                    <span className="bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full transition-colors group-hover:bg-primary/20 border border-transparent group-hover:border-primary/30">
+                                                        {activeFlow}
+                                                    </span>
+                                                    <div className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground flex-shrink-0">
+                                                        <Edit2 size={12} />
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Actions (Delete is always visible) */}
+                                            <div className="flex items-center gap-1 bg-white/50 dark:bg-zinc-900/50 rounded-full px-1 border border-border/50">
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full text-red-600 hover:bg-red-100" onClick={() => setFlowToDelete(activeFlow)}>
+                                                            <Trash2 size={12} />
+                                                        </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent side="bottom">Delete Flow</TooltipContent>
+                                                </Tooltip>
+                                            </div>
+                                        </div>
+
+                                        {/* Decoupled Description Edit */}
+                                        {editingFlowDesc ? (
+                                            <textarea
+                                                className="text-sm text-foreground max-w-2xl w-full text-center bg-white/50 dark:bg-zinc-900/50 border border-border/60 rounded-md outline-none focus:ring-1 focus:ring-primary resize-none px-4 py-2 m-0 overflow-hidden leading-relaxed shadow-sm transition-all"
+                                                value={flowDraft?.description || ''}
+                                                onChange={(e) => setFlowDraft(prev => prev ? { ...prev, description: e.target.value } : null)}
+                                                onKeyDown={handleFlowKeyDown}
+                                                rows={Math.max(1, (flowDraft?.description?.split('\n').length || 1))}
+                                                placeholder="Add a description for this flow... (Shift+Enter for new line)"
+                                                autoFocus
+                                            />
+                                        ) : (
+                                            <div
+                                                className="group relative cursor-text max-w-2xl w-full px-4 py-2 rounded-md transition-colors hover:bg-black/5 dark:hover:bg-white/5 border border-transparent hover:border-border/50 text-center flex justify-center items-center"
+                                                onClick={() => {
+                                                    const flow = graph.structure?.edges?.flows?.find((f: any) => f.name === activeFlow);
+                                                    setFlowDraft({ name: flow.name, description: flow.description || '' });
+                                                    setEditingFlowDesc(true);
+                                                }}
+                                                title="Click to edit description"
+                                            >
+                                                <p className="text-sm text-muted-foreground leading-relaxed">
+                                                    {graph?.structure?.edges?.flows?.find((f: any) => f.name === activeFlow)?.description || "No description provided."}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
+                            )}
+
+                            <div className="w-full flex-1 border-2 border-dashed border-border/60 rounded-xl bg-white/50 dark:bg-zinc-900/50 flex overflow-hidden">
+                                {renderFlowSequence()}
+                            </div>
                         </div>
                     )}
                     {mode === 'structure' && (
                         <div className="flex flex-col w-full h-full relative">
-                            {/* --- STICKY FUNCTIONALITY HEADER --- */}
+                            {/* --- STICKY FUNCTIONALITY HEADER & INLINE EDITING --- */}
                             {showFunctionality && activeFunction && (
-                                <div className="sticky -top-8 z-40 -mt-8 -mx-8 px-8 pt-6 pb-4 mb-8 bg-slate-50/95 dark:bg-zinc-950/95 backdrop-blur-md border-b border-border/50 flex flex-col items-center animate-in fade-in slide-in-from-top-2">
-                                    <div className="flex items-center gap-3 mb-3">
-                                        <span className="bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full">
-                                            {activeFunction}
-                                        </span>
+                                <div
+                                    className="sticky -top-8 z-40 -mt-8 -mx-8 px-8 pt-6 pb-4 mb-8 bg-slate-50/95 dark:bg-zinc-950/95 backdrop-blur-md border-b border-border/50 flex flex-col items-center animate-in fade-in slide-in-from-top-2"
+                                    onBlur={(e) => {
+                                        if (!e.currentTarget.contains(e.relatedTarget)) {
+                                            if (editingFuncTitle || editingFuncDesc) handleFuncEditSave();
+                                        }
+                                    }}
+                                >
+                                    <div className="flex items-center gap-3 mb-2">
+                                        {/* Decoupled Title Edit */}
+                                        {editingFuncTitle ? (
+                                            <input
+                                                className="bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full outline-none focus:ring-2 focus:ring-primary/50 min-w-[250px] text-center border-transparent"
+                                                value={funcDraft?.name || ''}
+                                                onChange={(e) => setFuncDraft(prev => prev ? { ...prev, name: e.target.value } : null)}
+                                                onKeyDown={handleFuncKeyDown}
+                                                autoFocus
+                                            />
+                                        ) : (
+                                            <div
+                                                className="group flex items-center gap-2 cursor-text"
+                                                onClick={() => {
+                                                    const func = graph.structure?.functionalities?.find((f: any) => f.name === activeFunction);
+                                                    setFuncDraft({ name: func.name, description: func.description || '' });
+                                                    setEditingFuncTitle(true);
+                                                }}
+                                                title="Click to edit title"
+                                            >
+                                                <span className="bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full transition-colors group-hover:bg-primary/20 border border-transparent group-hover:border-primary/30">
+                                                    {activeFunction}
+                                                </span>
+                                                <div className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground flex-shrink-0">
+                                                    <Edit2 size={12} />
+                                                </div>
+                                            </div>
+                                        )}
 
-                                        {/* Actions moved inline to prevent overlap */}
+                                        {/* Actions (Delete is always visible) */}
                                         <div className="flex items-center gap-1 bg-white/50 dark:bg-zinc-900/50 rounded-full px-1 border border-border/50">
                                             <Tooltip>
                                                 <TooltipTrigger asChild>
-                                                    <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full text-blue-600 hover:bg-blue-100" onClick={() => {
-                                                        const func = graph.metadata?.functionalities?.find((f: any) => f.name === activeFunction);
-                                                        setSelectedNode({ type: 'FunctionalityForm', isNew: false, originalName: activeFunction, ...func });
-                                                    }}>
-                                                        <Edit2 size={12} />
-                                                    </Button>
-                                                </TooltipTrigger>
-                                                <TooltipContent side="bottom">Edit Functionality</TooltipContent>
-                                            </Tooltip>
-
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full text-red-600 hover:bg-red-100" onClick={() => {
-                                                        setGraph((prev: any) => {
-                                                            const next = JSON.parse(JSON.stringify(prev));
-                                                            next.metadata.functionalities = next.metadata.functionalities.filter((f: any) => f.name !== activeFunction);
-                                                            return next;
-                                                        });
-                                                        setActiveFunction(null);
-                                                    }}>
+                                                    <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full text-red-600 hover:bg-red-100" onClick={() => setFunctionToDelete(activeFunction)}>
                                                         <Trash2 size={12} />
                                                     </Button>
                                                 </TooltipTrigger>
@@ -1093,39 +1612,88 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                             </Tooltip>
                                         </div>
                                     </div>
-                                </div>
-                            )}
-                            {/* --- NEW FUNCTIONALITY DESCRIPTION BANNER --- */}
-                            {showFunctionality && activeFunction && (
-                                <div className="max-w-2xl w-full mx-auto mb-8 flex flex-col items-center text-center animate-in fade-in slide-in-from-top-2">
-                                    <p className="text-sm text-muted-foreground">
-                                        {graph?.metadata?.functionalities?.find((f: any) => f.name === activeFunction)?.description || "No description provided."}
-                                    </p>
+
+                                    {/* Decoupled Description Edit */}
+                                    {editingFuncDesc ? (
+                                        <textarea
+                                            className="text-sm text-foreground max-w-2xl w-full text-center bg-white/50 dark:bg-zinc-900/50 border border-border/60 rounded-md outline-none focus:ring-1 focus:ring-primary resize-none px-4 py-2 m-0 overflow-hidden leading-relaxed shadow-sm transition-all"
+                                            value={funcDraft?.description || ''}
+                                            onChange={(e) => setFuncDraft(prev => prev ? { ...prev, description: e.target.value } : null)}
+                                            onKeyDown={handleFuncKeyDown}
+                                            rows={Math.max(1, (funcDraft?.description?.split('\n').length || 1))}
+                                            placeholder="Add a description for this functionality... (Shift+Enter for new line)"
+                                            autoFocus
+                                        />
+                                    ) : (
+                                        <div
+                                            className="group relative cursor-text max-w-2xl w-full px-4 py-2 rounded-md transition-colors hover:bg-black/5 dark:hover:bg-white/5 border border-transparent hover:border-border/50 text-center flex justify-center items-center"
+                                            onClick={() => {
+                                                const func = graph.structure?.functionalities?.find((f: any) => f.name === activeFunction);
+                                                setFuncDraft({ name: func.name, description: func.description || '' });
+                                                setEditingFuncDesc(true);
+                                            }}
+                                            title="Click to edit description"
+                                        >
+                                            <p className="text-sm text-muted-foreground leading-relaxed">
+                                                {graph?.structure?.functionalities?.find((f: any) => f.name === activeFunction)?.description || "No description provided."}
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
                             <div className="flex flex-wrap gap-8 items-start pb-20 justify-center">
-                                {graph.nodes?.screens?.filter((s: any) => {
-                                    // Only show top-level screens (parent === 'body')
-                                    if (s.parent !== 'body') return false;
-
-                                    // If functionality view is ON, only show screens that are "active"
-                                    if (showFunctionality && activeFunction) {
-                                        return isNodeActive(s.id);
-                                    }
-
-                                    // Otherwise show all top-level screens
-                                    return true;
-                                }).map((screen: any) => renderStandardNode(screen, 0))}
-
-                                {/* Hide 'Add Screen' button when focusing on a specific functionality to keep the view clean */}
-                                {(!showFunctionality || !activeFunction) && (
-                                    <div
-                                        onClick={() => setSelectedNode({ type: 'NewNode', isScreen: true, parent: 'body', name: '', purpose: '', styles: '', connectedTo: '' })}
-                                        className="w-80 border-2 border-dashed border-border hover:border-primary/50 rounded-xl flex items-center justify-center p-6 cursor-pointer text-muted-foreground hover:text-primary transition-colors min-h-[150px]"
-                                    >
-                                        + Add Screen
+                                {/* --- NEW: EMPTY STATE FOR 0 FUNCTIONALITY NODES --- */}
+                                {showFunctionality && activeFunction && (!graph.structure?.functionalities?.find((f: any) => f.name === activeFunction)?.relatedNodes?.length) ? (
+                                    <div className="w-full h-full min-h-[300px] flex flex-col items-center justify-center">
+                                        <div className="flex flex-col items-center text-muted-foreground animate-in zoom-in-95 duration-300">
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <Button
+                                                        size="icon"
+                                                        variant="outline"
+                                                        className="h-16 w-16 rounded-full border-dashed border-2 border-primary text-primary hover:bg-primary hover:text-white hover:border-solid transition-all bg-background shadow-sm mb-4"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            const func = graph.structure?.functionalities?.find((f: any) => f.name === activeFunction);
+                                                            setSelectedNode({ type: 'FunctionalityForm', isNew: false, originalName: activeFunction, ...func });
+                                                        }}
+                                                    >
+                                                        <Plus size={32} strokeWidth={2} />
+                                                    </Button>
+                                                </TooltipTrigger>
+                                                <TooltipContent>Add nodes to this functionality</TooltipContent>
+                                            </Tooltip>
+                                            <p className="text-sm font-medium text-foreground">Functionality is empty</p>
+                                            <p className="text-xs mt-1">Click the button to link screens and components</p>
+                                        </div>
                                     </div>
+                                ) : (
+                                    <>
+                                        {graph.structure?.nodes?.screens?.filter((s: any) => {
+                                            // Only show top-level screens (parent === 'body')
+                                            if (s.parent !== 'body') return false;
+
+                                            // If functionality view is ON, only show screens that are "active"
+                                            if (showFunctionality && activeFunction) {
+                                                return isNodeActive(s.id);
+                                            }
+
+                                            // Otherwise show all top-level screens
+                                            return true;
+                                        }).map((screen: any) => renderStandardNode(screen, 0))}
+
+                                        {/* Hide 'Add Screen' button when focusing on a specific functionality to keep the view clean */}
+                                        {(!showFunctionality || !activeFunction) && (
+                                            <div
+                                                onClick={() => setSelectedNode({ type: 'NewNode', isScreen: true, parent: 'body', name: '', purpose: '', styles: '', connectedTo: '' })}
+                                                /* Changed min-h-[150px] to min-h-[124px] so it perfectly matches an empty screen card */
+                                                className="w-80 self-stretch border-2 border-dashed border-border hover:border-primary/50 rounded-xl flex items-center justify-center p-6 cursor-pointer text-muted-foreground hover:text-primary transition-colors min-h-[124px]"
+                                            >
+                                                + Add Screen
+                                            </div>
+                                        )}
+                                    </>
                                 )}
                             </div>
                         </div>
@@ -1161,7 +1729,8 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                             <span className="text-xs font-bold uppercase tracking-wider text-primary">
                                 {selectedNode.type === 'PersonaForm' ? (personaDraft?.isNew ? 'Add Persona' : 'Edit Persona') :
                                     selectedNode.type === 'FunctionalityForm' ? (selectedNode.isNew ? 'Add Functionality' : 'Edit Functionality') :
-                                        `${selectedNode.type} Settings`}
+                                        selectedNode.type === 'FlowForm' ? (selectedNode.isNew ? 'Add Flow' : 'Edit Flow') :
+                                            `${selectedNode.type} Settings`}
                             </span>
                             <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setSelectedNode(null)}>✕</Button>
                         </div>
@@ -1172,8 +1741,34 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                 <>
                                     <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Name</label><input className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.name} onChange={(e) => handleUpdateNode('name', e.target.value)} /></div>
                                     <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Purpose</label><textarea className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary min-h-[80px]" value={selectedNode.purpose} onChange={(e) => handleUpdateNode('purpose', e.target.value)} /></div>
-                                    <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Styles (Specific or Inherited)</label><input className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary font-mono text-xs" value={selectedNode.styles || "Inherited from Global"} onChange={(e) => handleUpdateNode('styles', e.target.value)} /></div>
-                                    <div className="pt-4 border-t flex justify-end gap-2">
+
+                                    {/* --- DYNAMIC STYLES DROPDOWNS --- */}
+                                    <div className="space-y-2 border-t pt-3 mt-3">
+                                        <span className="text-xs font-bold uppercase text-primary tracking-wider">Styles</span>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Text Color</label>
+                                            <select className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.styles?.color || ''} onChange={(e) => { const newStyles = { ...(selectedNode.styles || {}) }; if (e.target.value) newStyles.color = e.target.value; else delete newStyles.color; handleUpdateNode('styles', newStyles); }}>
+                                                <option value="">Inherit Default</option>
+                                                {Object.entries(graph.surface?.all_styles?.colors || {}).map(([k, v]: any) => <option key={k} value={k}>{v.name}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Background Color</label>
+                                            <select className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.styles?.background_color || ''} onChange={(e) => { const newStyles = { ...(selectedNode.styles || {}) }; if (e.target.value) newStyles.background_color = e.target.value; else delete newStyles.background_color; handleUpdateNode('styles', newStyles); }}>
+                                                <option value="">Inherit Default</option>
+                                                {Object.entries(graph.surface?.all_styles?.colors || {}).map(([k, v]: any) => <option key={k} value={k}>{v.name}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Typography</label>
+                                            <select className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.styles?.typography || ''} onChange={(e) => { const newStyles = { ...(selectedNode.styles || {}) }; if (e.target.value) newStyles.typography = e.target.value; else delete newStyles.typography; handleUpdateNode('styles', newStyles); }}>
+                                                <option value="">Inherit Default</option>
+                                                {Object.entries(graph.surface?.all_styles?.typography?.hierarchy || {}).map(([k, v]: any) => <option key={k} value={k}>{v.element} ({v.size})</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-4 border-t flex justify-end gap-2 mt-4">
                                         <Button variant="outline" size="sm" onClick={() => setSelectedNode(null)}>Cancel</Button>
                                         <Button size="sm" onClick={() => setSelectedNode(null)}>Save</Button>
                                     </div>
@@ -1185,31 +1780,57 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                 <>
                                     <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Name</label><input className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.name} onChange={(e) => setSelectedNode({ ...selectedNode, name: e.target.value })} autoFocus /></div>
                                     <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Purpose</label><textarea className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary min-h-[80px]" value={selectedNode.purpose} onChange={(e) => setSelectedNode({ ...selectedNode, purpose: e.target.value })} /></div>
-                                    <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Styles</label><input className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary font-mono text-xs" value={selectedNode.styles} placeholder="Inherited from Global" onChange={(e) => setSelectedNode({ ...selectedNode, styles: e.target.value })} /></div>
-                                    <div>
+
+                                    {/* --- DYNAMIC STYLES DROPDOWNS --- */}
+                                    <div className="space-y-2 border-t pt-3 mt-3">
+                                        <span className="text-xs font-bold uppercase text-primary tracking-wider">Styles</span>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Text Color</label>
+                                            <select className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.styles?.color || ''} onChange={(e) => { const newStyles = { ...(selectedNode.styles || {}) }; if (e.target.value) newStyles.color = e.target.value; else delete newStyles.color; setSelectedNode({ ...selectedNode, styles: newStyles }); }}>
+                                                <option value="">Inherit Default</option>
+                                                {Object.entries(graph.surface?.all_styles?.colors || {}).map(([k, v]: any) => <option key={k} value={k}>{v.name}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Background Color</label>
+                                            <select className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.styles?.background_color || ''} onChange={(e) => { const newStyles = { ...(selectedNode.styles || {}) }; if (e.target.value) newStyles.background_color = e.target.value; else delete newStyles.background_color; setSelectedNode({ ...selectedNode, styles: newStyles }); }}>
+                                                <option value="">Inherit Default</option>
+                                                {Object.entries(graph.surface?.all_styles?.colors || {}).map(([k, v]: any) => <option key={k} value={k}>{v.name}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Typography</label>
+                                            <select className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.styles?.typography || ''} onChange={(e) => { const newStyles = { ...(selectedNode.styles || {}) }; if (e.target.value) newStyles.typography = e.target.value; else delete newStyles.typography; setSelectedNode({ ...selectedNode, styles: newStyles }); }}>
+                                                <option value="">Inherit Default</option>
+                                                {Object.entries(graph.surface?.all_styles?.typography?.hierarchy || {}).map(([k, v]: any) => <option key={k} value={k}>{v.element} ({v.size})</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-3">
                                         <label className="text-xs font-semibold text-muted-foreground mb-1 block">Connected to Node (Navigation)</label>
                                         <select className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.connectedTo} onChange={(e) => setSelectedNode({ ...selectedNode, connectedTo: e.target.value })}>
                                             <option value="">None</option>
-                                            {[...(graph.nodes?.screens || []), ...(graph.nodes?.components || [])].map(n => (
+                                            {[...(graph.structure?.nodes?.screens || []), ...(graph.structure?.nodes?.components || [])].map(n => (
                                                 <option key={n.id} value={n.id}>{n.name} ({n.id.startsWith('screen') ? 'Screen' : 'Component'})</option>
                                             ))}
                                         </select>
                                     </div>
-                                    <div className="pt-4 border-t flex justify-end gap-2">
+                                    <div className="pt-4 border-t flex justify-end gap-2 mt-4">
                                         <Button variant="outline" size="sm" onClick={() => setSelectedNode(null)}>Cancel</Button>
                                         <Button size="sm" onClick={() => {
                                             if (!selectedNode.name) return;
                                             setGraph((prev: any) => {
                                                 const next = JSON.parse(JSON.stringify(prev));
                                                 const newId = selectedNode.isScreen ? `screen-new-${Date.now()}` : `comp-new-${Date.now()}`;
-                                                const newNode = { id: newId, parent: selectedNode.parent, name: selectedNode.name, purpose: selectedNode.purpose, styles: selectedNode.styles || "Inherited from Global" };
+                                                const newNode = { id: newId, parent: selectedNode.parent, name: selectedNode.name, purpose: selectedNode.purpose, styles: selectedNode.styles || {} };
 
-                                                if (selectedNode.isScreen) next.nodes.screens.push(newNode);
-                                                else next.nodes.components.push(newNode);
+                                                if (selectedNode.isScreen) next.structure.nodes.screens.push(newNode);
+                                                else next.structure.nodes.components.push(newNode);
 
                                                 if (selectedNode.connectedTo) {
-                                                    if (!next.edges.navigation) next.edges.navigation = [];
-                                                    next.edges.navigation.push({ fromComponentId: newId, toScreenId: selectedNode.connectedTo });
+                                                    if (!next.structure.edges.navigation) next.structure.edges.navigation = [];
+                                                    next.structure.edges.navigation.push({ fromComponentId: newId, toScreenId: selectedNode.connectedTo });
                                                 }
                                                 return next;
                                             });
@@ -1230,7 +1851,7 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                             onChange={(e) => setInsertFlowContext({ ...insertFlowContext, selectedScreen: e.target.value, selectedComponent: '' })}
                                         >
                                             <option value="">Select a screen...</option>
-                                            {graph.nodes?.screens?.filter((s: any) => s.parent === 'body').map((n: any) => (
+                                            {graph.structure?.nodes?.screens?.filter((s: any) => s.parent === 'body').map((n: any) => (
                                                 <option key={n.id} value={n.id}>{n.name}</option>
                                             ))}
                                         </select>
@@ -1246,10 +1867,10 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                             >
                                                 <option value="">Entire Screen (Default)</option>
                                                 {/* Recursively find all children components of the selected screen */}
-                                                {graph.nodes?.components?.filter((c: any) => {
+                                                {graph.structure?.nodes?.components?.filter((c: any) => {
                                                     const checkParent = (id: string): boolean => {
                                                         if (id === insertFlowContext.selectedScreen) return true;
-                                                        const node = graph.nodes.components.find((comp: any) => comp.id === id);
+                                                        const node = graph.structure?.nodes.components.find((comp: any) => comp.id === id);
                                                         if (node && node.parent !== 'body') return checkParent(node.parent);
                                                         return false;
                                                     };
@@ -1334,17 +1955,14 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                             {/* Editor fields for Functionalities */}
                             {selectedNode.type === 'FunctionalityForm' && (
                                 <>
-                                    <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Functionality Name</label><input className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.name} onChange={(e) => setSelectedNode({ ...selectedNode, name: e.target.value })} autoFocus /></div>
-                                    <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Description</label><textarea className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary min-h-[80px]" value={selectedNode.description || ''} onChange={(e) => setSelectedNode({ ...selectedNode, description: e.target.value })} /></div>
-
                                     <div>
                                         <label className="text-xs font-semibold text-muted-foreground mb-2 block">Associated Screen/Components</label>
                                         <div className="border border-border bg-slate-50 dark:bg-zinc-800 rounded-md p-2 h-72 overflow-y-auto space-y-0.5">
                                             {(() => {
                                                 const renderCheckboxTree = (parentId: string, depth: number = 0): React.ReactNode => {
                                                     const children = parentId === 'body'
-                                                        ? graph.nodes?.screens?.filter((s: any) => s.parent === 'body') || []
-                                                        : graph.nodes?.components?.filter((c: any) => c.parent === parentId) || [];
+                                                        ? graph.structure?.nodes?.screens?.filter((s: any) => s.parent === 'body') || []
+                                                        : graph.structure?.nodes?.components?.filter((c: any) => c.parent === parentId) || [];
 
                                                     return children.map((n: any) => {
                                                         const isSelected = selectedNode.relatedNodes?.includes(n.id);
@@ -1384,22 +2002,108 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                             if (!selectedNode.name) return;
                                             setGraph((prev: any) => {
                                                 const next = JSON.parse(JSON.stringify(prev));
-                                                if (!next.metadata) next.metadata = {};
-                                                if (!next.metadata.functionalities) next.metadata.functionalities = [];
+                                                if (!next.structure.functionalities) next.structure.functionalities = [];
 
                                                 const newFunc = { name: selectedNode.name, description: selectedNode.description, relatedNodes: selectedNode.relatedNodes || [] };
 
                                                 if (selectedNode.isNew) {
-                                                    next.metadata.functionalities.push(newFunc);
+                                                    next.structure.functionalities.push(newFunc);
                                                 } else {
-                                                    const idx = next.metadata.functionalities.findIndex((f: any) => f.name === selectedNode.originalName);
-                                                    if (idx > -1) next.metadata.functionalities[idx] = newFunc;
+                                                    const idx = next.structure.functionalities.findIndex((f: any) => f.name === selectedNode.originalName);
+                                                    if (idx > -1) next.structure.functionalities[idx] = newFunc;
                                                 }
                                                 return next;
                                             });
                                             setActiveFunction(selectedNode.name);
                                             setSelectedNode(null);
                                         }}>Save</Button>
+                                    </div>
+                                </>
+                            )}
+                            {/* Editor fields for Flows */}
+                            {selectedNode.type === 'FlowForm' && (
+                                <>
+                                    <div>
+                                        <label className="text-xs font-semibold text-muted-foreground mb-1 block">Flow Name</label>
+                                        <input className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.name} onChange={(e) => setSelectedNode({ ...selectedNode, name: e.target.value })} autoFocus />
+                                    </div>
+                                    <div className="mt-4">
+                                        <label className="text-xs font-semibold text-muted-foreground mb-1 block">Description</label>
+                                        <textarea className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary min-h-[80px]" value={selectedNode.description || ''} onChange={(e) => setSelectedNode({ ...selectedNode, description: e.target.value })} />
+                                    </div>
+
+                                    <div className="mt-4 border-t pt-4">
+                                        <label className="text-xs font-semibold text-muted-foreground mb-2 block">Flow Sequence</label>
+
+                                        {/* Display ordered list of steps */}
+                                        <div className="border border-border bg-slate-50 dark:bg-zinc-800 rounded-md p-2 max-h-64 overflow-y-auto space-y-1 mb-3">
+                                            {(!selectedNode.steps || selectedNode.steps.length === 0) && <div className="text-xs text-muted-foreground italic p-1">No steps added yet. Select below to build the sequence.</div>}
+                                            {selectedNode.steps?.map((stepId: string, idx: number) => {
+                                                const nodeInfo = getNodeById(stepId);
+                                                return (
+                                                    <div key={`${stepId}-${idx}`} className="flex justify-between items-center bg-white dark:bg-zinc-900 border border-border/50 rounded px-2 py-1.5 text-xs shadow-sm">
+                                                        <div className="flex items-center gap-2 truncate pr-2">
+                                                            <span className="bg-primary/10 text-primary font-mono text-[9px] px-1.5 rounded">{idx + 1}</span>
+                                                            <span className="truncate font-medium">{nodeInfo?.name || stepId}</span>
+                                                            <span className="text-[9px] uppercase opacity-50">{nodeInfo?.isScreen ? 'Screen' : 'Component'}</span>
+                                                        </div>
+                                                        <Button variant="ghost" size="icon" className="h-5 w-5 text-red-600 hover:bg-red-100 flex-shrink-0" onClick={() => {
+                                                            const newSteps = [...selectedNode.steps];
+                                                            newSteps.splice(idx, 1);
+                                                            setSelectedNode({ ...selectedNode, steps: newSteps });
+                                                        }}>
+                                                            <Trash2 size={10} />
+                                                        </Button>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* Dropdown to append new steps */}
+                                        <div className="flex gap-2">
+                                            <select
+                                                className="w-full bg-white dark:bg-zinc-900 border rounded-md px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary"
+                                                id="flow-step-select"
+                                            >
+                                                <option value="">Add screen/component to flow...</option>
+                                                {[...(graph.structure?.nodes?.screens || []), ...(graph.structure?.nodes?.components || [])].map(n => (
+                                                    <option key={n.id} value={n.id}>{n.name} ({n.id.startsWith('screen') ? 'Screen' : 'Component'})</option>
+                                                ))}
+                                            </select>
+                                            <Button size="sm" variant="secondary" className="text-xs h-auto py-1 px-3 border border-border" onClick={() => {
+                                                const selectEl = document.getElementById('flow-step-select') as HTMLSelectElement;
+                                                if (selectEl && selectEl.value) {
+                                                    setSelectedNode({ ...selectedNode, steps: [...(selectedNode.steps || []), selectEl.value] });
+                                                    selectEl.value = ""; // Reset dropdown after pushing
+                                                }
+                                            }}>
+                                                Add
+                                            </Button>
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-4 border-t flex justify-end gap-2 mt-4">
+                                        <Button variant="outline" size="sm" onClick={() => setSelectedNode(null)}>Cancel</Button>
+                                        <Button size="sm" onClick={() => {
+                                            if (!selectedNode.name) return;
+                                            setGraph((prev: any) => {
+                                                const next = JSON.parse(JSON.stringify(prev));
+                                                if (!next.structure.edges) next.structure.edges = {};
+                                                if (!next.structure.edges.flows) next.structure.edges.flows = [];
+
+                                                const newFlow = { name: selectedNode.name, description: selectedNode.description, steps: selectedNode.steps || [] };
+
+                                                if (selectedNode.isNew) {
+                                                    next.structure.edges.flows.push(newFlow);
+                                                } else {
+                                                    const idx = next.structure.edges.flows.findIndex((f: any) => f.name === selectedNode.originalName);
+                                                    if (idx > -1) next.structure.edges.flows[idx] = newFlow;
+                                                }
+                                                return next;
+                                            });
+                                            setActiveFlow(selectedNode.name);
+                                            setSelectedNode(null);
+                                        }}>Save Flow</Button>
                                     </div>
                                 </>
                             )}
