@@ -8,7 +8,7 @@ import React, { useState, useRef, useEffect, useMemo } from "react";
 import Editor, { OnMount } from "@monaco-editor/react";
 import { useLoadAppFile } from "@/hooks/useLoadAppFile";
 import { useTheme } from "@/contexts/ThemeContext";
-import { Circle, Save, RefreshCw, Layout, Code, MousePointerClick, ArrowRight, ArrowLeft, ArrowDown, ZoomInIcon, ZoomOutIcon, Briefcase, Edit2, Trash2, ChevronRight, ChevronDown, Plus } from "lucide-react";
+import { Circle, Save, RefreshCw, Layout, Code, MousePointerClick, ArrowRight, ArrowLeft, ArrowDown, ZoomInIcon, ZoomOutIcon, Briefcase, Edit2, Trash2, ChevronRight, ChevronDown, Plus, Globe, GripVertical } from "lucide-react";
 import "@/components/chat/monaco";
 import { IpcClient } from "@/ipc/ipc_client";
 import { showError, showSuccess, showWarning } from "@/lib/toast";
@@ -24,6 +24,8 @@ import { useCheckProblems } from "@/hooks/useCheckProblems";
 import { getLanguage } from "@/utils/get_language";
 
 type CanvasMode = 'project' | 'structure' | 'flows';
+type NavRuleType = 'global' | 'local' | 'contextual' | 'supplementary' | 'courtesy' | 'remote';
+const navTypes: NavRuleType[] = ['global', 'local', 'contextual', 'supplementary', 'courtesy', 'remote'];
 
 interface DesignFileEditorProps {
     appId: number | null;
@@ -35,6 +37,135 @@ interface BreadcrumbProps {
     hasUnsavedChanges: boolean;
     onSave: () => void;
     isSaving: boolean;
+}
+
+// --- Strategy Section ---
+interface Persona {
+    name: string;
+    demographics: {
+        gender: string;
+        age: number;
+        education_level: string;
+        marital_status: string;
+        annual_income: number;
+    };
+    technicalProfile: {
+        expertise_level: string;
+        internet_usage: number;
+        favourite_sites: string;
+    };
+    knowledgeProfile: string;
+}
+
+interface Strategy {
+    productDescription: string;
+    objectives: {
+        forUsers: string;
+        forCreator: string;
+    };
+    personas: Persona[];
+    outOfScope: string[];
+}
+
+// --- Structure Section ---
+interface NodeStyle {
+    layout?: {
+        mobile: string;
+        tablet: string;
+        desktop: string;
+        grid: string;
+    };
+    color?: string;
+    typography?: string;
+}
+
+interface GraphNode {
+    id: string;
+    parent: string;
+    name: string;
+    purpose: string;
+    styles?: NodeStyle;
+}
+
+interface NavRule {
+    name?: string;
+    purpose?: string;
+    layouts?: Record<string, string>;
+    order_of_screens?: string[];
+    display_in?: string[];
+    where?: string;
+    description?: string;
+    target?: string;
+}
+
+interface Structure {
+    nodes: {
+        screens: GraphNode[];
+        components: GraphNode[];
+    };
+    edges: {
+        navigationRules: {
+            global: NavRule[];
+            local: NavRule[];
+            contextual: NavRule[];
+            supplementary: NavRule[];
+            courtesy: NavRule[];
+            remote: NavRule[];
+        };
+        navigation: Array<{
+            fromComponentId: string;
+            toScreenId: string;
+        }>;
+        flows: Array<{
+            name: string;
+            description: string;
+            steps: string[];
+        }>;
+    };
+    functionalities: Array<{
+        name: string;
+        description: string;
+        relatedNodes: string[];
+    }>;
+}
+
+// --- Surface Section ---
+interface TypographyDetail {
+    element: string;
+    size: string;
+    weight: string;
+    lineHeight: string;
+    usage: string;
+}
+
+interface Surface {
+    all_styles: {
+        purpose: string;
+        colors: Record<string, { name: string; color: string }>;
+        typography: {
+            family: string;
+            hierarchy: Record<string, TypographyDetail>;
+        };
+    };
+    global_styles: {
+        purpose: string;
+        color: string;
+        typography: string;
+        background_color: string;
+        layout: NodeStyle['layout'];
+        interactions: Record<string, string>;
+        accessibility: {
+            keyboard: string[];
+            visualHierarchy: string;
+        };
+    };
+}
+
+// --- Root Object ---
+export interface ProductGraph {
+    strategy: Strategy;
+    structure: Structure;
+    surface: Surface;
 }
 
 const Breadcrumb: React.FC<BreadcrumbProps> = ({
@@ -199,8 +330,18 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
     const [editingFuncTitle, setEditingFuncTitle] = useState<boolean>(false);
     const [editingFuncDesc, setEditingFuncDesc] = useState<boolean>(false);
     const [funcDraft, setFuncDraft] = useState<{ name: string, description: string } | null>(null);
+    const [navRuleDraft, setNavRuleDraft] = useState({ type: 'local', target: '', description: '' });
 
-    // View Options 
+    const NAV_TYPES = [
+        { id: 'global', label: 'Global', desc: 'Provides access to the broad sweep of the entire site.' },
+        { id: 'local', label: 'Local', desc: 'Provides access to what’s "nearby" in the architecture.' },
+        { id: 'supplementary', label: 'Supplementary', desc: 'Shortcuts to related content not readily accessible through global/local nav.' },
+        { id: 'contextual', label: 'Contextual', desc: 'Embedded in content to support users’ tasks. Avoid cluttering with too many links.' },
+        { id: 'courtesy', label: 'Courtesy', desc: 'Access to common convenience items (e.g., contact info, feedback forms, policies).' },
+        { id: 'remote', label: 'Remote', desc: 'Independent fallback devices (e.g., sitemap, index) for when users are frustrated/confused.' }
+    ];
+
+    // View Options
     const [zoomLevel, setZoomLevel] = useState<number>(1);
     const [showNav, setShowNav] = useState<boolean>(false);
     const [showStyles, setShowStyles] = useState<boolean>(false);
@@ -221,11 +362,16 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
     const [itemsPerRow, setItemsPerRow] = useState<number>(3);
 
     // Editable Graph State
-    const [graph, setGraph] = useState<any>(null);
+    const [graph, setGraph] = useState<ProductGraph | null>(null);
 
     const [draggedFlowIndex, setDraggedFlowIndex] = useState<number | null>(null);
     const [liveSteps, setLiveSteps] = useState<string[] | null>(null); // Holds the live preview array
     const [insertFlowContext, setInsertFlowContext] = useState<{ index: number, selectedScreen: string, selectedComponent: string } | null>(null);
+
+    const [parseError, setParseError] = useState<string | null>(null);
+
+    const [expandedNavSections, setExpandedNavSections] = useState<Set<string>>(new Set(['local'])); // Default local open
+    const [draggedRuleInfo, setDraggedRuleInfo] = useState<{ type: string; index: number } | null>(null);
 
     useEffect(() => {
         try {
@@ -238,8 +384,9 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
             if (expandedNodes.size === 0 && parsedGraph.structure?.nodes?.screens) {
                 setExpandedNodes(new Set());
             }
-        } catch (e) {
+        } catch (e: any) {
             console.error("Failed to parse Design Semantic JSON", e);
+            setParseError(e.message);
         }
     }, [content]);
 
@@ -284,6 +431,11 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground p-8 text-center">
                 <Layout className="w-12 h-12 mb-4 opacity-20" />
                 <h3 className="text-lg font-medium text-foreground">No Graph Data Found</h3>
+                {parseError && (
+                    <p className="text-sm text-red-500 mt-2 bg-red-50 p-2 rounded border border-red-100">
+                        JSON Error: {parseError}
+                    </p>
+                )}
             </div>
         );
     }
@@ -352,6 +504,31 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                     next.strategy.outOfScope[inlineEdit.index] = inlineEdit.value;
                 } else {
                     next.strategy.outOfScope.push(inlineEdit.value);
+                }
+            }
+            if (['globalNavName', 'globalNavPurpose', 'globalNavMobile', 'globalNavTablet', 'globalNavDesktop'].includes(inlineEdit.field)) {
+                // 1. Ensure the deep nested structure exists
+                if (!next.structure.edges) next.structure.edges = {};
+                if (!next.structure.edges.navigationRules) next.structure.edges.navigationRules = {};
+                if (!Array.isArray(next.structure.edges.navigationRules.global)) {
+                    next.structure.edges.navigationRules.global = [{}];
+                }
+                if (!next.structure.edges.navigationRules.global[0]) {
+                    next.structure.edges.navigationRules.global[0] = {};
+                }
+
+                const globalRule = next.structure.edges.navigationRules.global[0];
+
+                // 2. Save to the correct property
+                if (inlineEdit.field === 'globalNavName') {
+                    globalRule.name = inlineEdit.value;
+                } else if (inlineEdit.field === 'globalNavPurpose') {
+                    globalRule.purpose = inlineEdit.value;
+                } else {
+                    // Mobile, Tablet, Desktop live inside the `layouts` object now
+                    if (!globalRule.layouts) globalRule.layouts = {};
+                    const key = inlineEdit.field.replace('globalNav', '').toLowerCase();
+                    globalRule.layouts[key] = inlineEdit.value;
                 }
             }
             return next;
@@ -577,6 +754,26 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
         setInsertFlowContext(null);
         setSelectedNode(null);
     };
+
+    const toggleNavSection = (id: string) => {
+        setExpandedNavSections(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const handleReorderNavRule = (type: string, oldIndex: number, newIndex: number) => {
+        setGraph((prev: any) => {
+            const next = JSON.parse(JSON.stringify(prev));
+            const rules = next.structure.edges.navigationRules[type];
+            const [movedItem] = rules.splice(oldIndex, 1);
+            rules.splice(newIndex, 0, movedItem);
+            return next;
+        });
+    };
+
     const getNodeById = (id: string) => {
         const screen = graph.structure?.nodes?.screens?.find((s: any) => s.id === id);
         if (screen) return { ...screen, isScreen: true };
@@ -586,22 +783,27 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
     };
 
     const isNodeActive = (id: string): boolean => {
+        if (!graph) return true; // Add this guard
+
         if (mode === 'structure') {
             if (showFunctionality && activeFunction) {
-                const func = graph.structure?.functionalities?.find((f: any) => f.name === activeFunction);
+                const func = graph.structure.functionalities.find(f => f.name === activeFunction);
                 if (!func) return true;
                 if (func.relatedNodes.includes(id)) return true;
+
                 const hasActiveChild = (nodeId: string): boolean => {
-                    const children = graph.structure?.nodes.components.filter((c: any) => c.parent === nodeId);
-                    return children.some((c: any) => func.relatedNodes.includes(c.id) || hasActiveChild(c.id));
+                    const children = graph.structure.nodes.components.filter(c => c.parent === nodeId);
+                    return children.some(c => func.relatedNodes.includes(c.id) || hasActiveChild(c.id));
                 };
                 return hasActiveChild(id);
             }
             return true;
         }
+
         if (mode === 'flows' && activeFlow) {
-            const flow = graph.structure?.edges?.flows?.find((f: any) => f.name === activeFlow);
-            return flow?.steps.includes(id);
+            const flow = graph.structure.edges.flows.find(f => f.name === activeFlow);
+            // Use ?? false to ensure a boolean is always returned
+            return flow?.steps.includes(id) ?? false;
         }
         return true;
     };
@@ -754,11 +956,28 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
 
                 <div className="px-3 py-1 space-y-1 mt-1">
                     {showNav && incomingNavs.length > 0 && incomingNavs.map((n: any, i: number) => (
-                        <div key={i} className="text-[10px] text-blue-600 font-medium">← Comes from {getNodeById(n.fromComponentId)?.name || 'Unknown'}</div>
+                        <div key={i} className="text-[10px] text-blue-600 font-medium">→ Comes from {getNodeById(n.fromComponentId)?.name || 'Unknown'}</div>
                     ))}
                     {showNav && outgoingNavs.length > 0 && outgoingNavs.map((n: any, i: number) => (
-                        <div key={i} className="text-[10px] text-emerald-600 font-medium">→ Goes to {getNodeById(n.toScreenId)?.name || 'Unknown'}</div>
+                        <div key={i} className="text-[10px] text-emerald-600 font-medium">Goes to {getNodeById(n.toScreenId)?.name || 'Unknown'} →</div>
                     ))}
+                    {showNav && (
+                        navTypes.flatMap(type => {
+                            const rules = graph.structure?.edges?.navigationRules?.[type] || [];
+                            return rules
+                                .filter((r) => r.where === node.id)
+                                .map((r, i: number) => {
+                                    const colors: any = { local: "text-blue-500 border-blue-300", contextual: "text-blue-600 border-blue-400", supplementary: "text-blue-700 border-blue-500", courtesy: "text-indigo-500 border-indigo-400", remote: "text-cyan-600 border-cyan-400" };
+                                    return (
+                                        <div key={`${type}-${i}`} className={`text-[10px] font-medium flex items-start gap-1.5 mt-1 ${colors[type] || 'text-muted-foreground border-muted-foreground'}`}>
+                                            <span className="uppercase opacity-80 border px-1 rounded-[3px] text-[8px] leading-tight mt-[1px] flex-shrink-0 bg-white/50">{type}</span>
+                                            <span className="leading-tight break-words whitespace-normal">{r.description}</span>
+                                            {r.target && <span className="opacity-70">→ {getNodeById(r.target)?.name || r.target}</span>}
+                                        </div>
+                                    );
+                                });
+                        })
+                    )}
                     {showStyles && node.styles && (
                         <div className="text-[10px] text-amber-600 dark:text-amber-500 font-medium font-mono truncate">
                             Styles: {typeof node.styles === 'object' ? Object.entries(node.styles).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(' | ') : String(node.styles)}
@@ -1497,8 +1716,10 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                                     className="group flex items-center gap-2 cursor-text"
                                                     onClick={() => {
                                                         const flow = graph.structure?.edges?.flows?.find((f: any) => f.name === activeFlow);
-                                                        setFlowDraft({ name: flow.name, description: flow.description || '' });
-                                                        setEditingFlowTitle(true);
+                                                        if (flow) {
+                                                            setFlowDraft({ name: flow.name, description: flow.description || '' });
+                                                            setEditingFlowTitle(true);
+                                                        }
                                                     }}
                                                     title="Click to edit title"
                                                 >
@@ -1540,8 +1761,10 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                                 className="group relative cursor-text max-w-2xl w-full px-4 py-2 rounded-md transition-colors hover:bg-black/5 dark:hover:bg-white/5 border border-transparent hover:border-border/50 text-center flex justify-center items-center"
                                                 onClick={() => {
                                                     const flow = graph.structure?.edges?.flows?.find((f: any) => f.name === activeFlow);
-                                                    setFlowDraft({ name: flow.name, description: flow.description || '' });
-                                                    setEditingFlowDesc(true);
+                                                    if (flow) {
+                                                        setFlowDraft({ name: flow.name, description: flow.description || '' });
+                                                        setEditingFlowDesc(true);
+                                                    }
                                                 }}
                                                 title="Click to edit description"
                                             >
@@ -1586,8 +1809,10 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                                 className="group flex items-center gap-2 cursor-text"
                                                 onClick={() => {
                                                     const func = graph.structure?.functionalities?.find((f: any) => f.name === activeFunction);
-                                                    setFuncDraft({ name: func.name, description: func.description || '' });
-                                                    setEditingFuncTitle(true);
+                                                    if (func) {
+                                                        setFuncDraft({ name: func.name, description: func.description || '' });
+                                                        setEditingFuncTitle(true);
+                                                    }
                                                 }}
                                                 title="Click to edit title"
                                             >
@@ -1629,8 +1854,10 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                             className="group relative cursor-text max-w-2xl w-full px-4 py-2 rounded-md transition-colors hover:bg-black/5 dark:hover:bg-white/5 border border-transparent hover:border-border/50 text-center flex justify-center items-center"
                                             onClick={() => {
                                                 const func = graph.structure?.functionalities?.find((f: any) => f.name === activeFunction);
-                                                setFuncDraft({ name: func.name, description: func.description || '' });
-                                                setEditingFuncDesc(true);
+                                                if (func) {
+                                                    setFuncDraft({ name: func.name, description: func.description || '' });
+                                                    setEditingFuncDesc(true);
+                                                }
                                             }}
                                             title="Click to edit description"
                                         >
@@ -1669,31 +1896,136 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                         </div>
                                     </div>
                                 ) : (
-                                    <>
-                                        {graph.structure?.nodes?.screens?.filter((s: any) => {
-                                            // Only show top-level screens (parent === 'body')
-                                            if (s.parent !== 'body') return false;
+                                    <div className="flex flex-col items-center w-full gap-4 max-w-4xl mx-auto">
+                                        {(!showFunctionality || !activeFunction) && showNav && (
+                                            <div className="w-full bg-white dark:bg-zinc-900 border border-border rounded-xl shadow-sm mb-8 overflow-hidden">
+                                                <div className="bg-slate-50 dark:bg-zinc-800/50 px-4 py-3 border-b flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <Globe size={16} className="text-primary" />
+                                                        <h3 className="text-xs font-bold uppercase tracking-widest">App Wide Navigation</h3>
+                                                    </div>
+                                                    <span className="text-[10px] text-muted-foreground italic font-medium">Click rules to edit</span>
+                                                </div>
 
-                                            // If functionality view is ON, only show screens that are "active"
-                                            if (showFunctionality && activeFunction) {
-                                                return isNodeActive(s.id);
-                                            }
+                                                <div className="divide-y divide-border/40">
+                                                    {NAV_TYPES.map((navType) => {
+                                                        // 1. Get all rules, then filter non-globals to ONLY show 'app-wide'
+                                                        const allTypeRules = graph.structure?.edges?.navigationRules?.[navType.id as string] || [];
+                                                        const displayRules = navType.id === 'global'
+                                                            ? allTypeRules
+                                                            : allTypeRules.filter((r: any) => r.where === 'app-wide');
 
-                                            // Otherwise show all top-level screens
-                                            return true;
-                                        }).map((screen: any) => renderStandardNode(screen, 0))}
+                                                        const isExpanded = expandedNavSections.has(navType.id);
 
-                                        {/* Hide 'Add Screen' button when focusing on a specific functionality to keep the view clean */}
-                                        {(!showFunctionality || !activeFunction) && (
-                                            <div
-                                                onClick={() => setSelectedNode({ type: 'NewNode', isScreen: true, parent: 'body', name: '', purpose: '', styles: '', connectedTo: '' })}
-                                                /* Changed min-h-[150px] to min-h-[124px] so it perfectly matches an empty screen card */
-                                                className="w-80 self-stretch border-2 border-dashed border-border hover:border-primary/50 rounded-xl flex items-center justify-center p-6 cursor-pointer text-muted-foreground hover:text-primary transition-colors min-h-[124px]"
-                                            >
-                                                + Add Screen
+                                                        return (
+                                                            <div key={navType.id} className="group/section">
+                                                                {/* Header with rearranged badge and new Add button */}
+                                                                <div className="w-full px-4 py-2 flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors cursor-pointer" onClick={() => toggleNavSection(navType.id)}>
+                                                                    {isExpanded ? <ChevronDown size={14} className="flex-shrink-0" /> : <ChevronRight size={14} className="flex-shrink-0" />}
+                                                                    <span className="text-xs font-semibold flex-shrink-0">{navType.label}</span>
+                                                                    <span className="bg-muted text-[10px] px-1.5 py-0.5 rounded-full opacity-60 flex-shrink-0">{displayRules.length}</span>
+
+                                                                    <Button
+                                                                        variant="ghost"
+                                                                        size="icon"
+                                                                        className="ml-auto h-6 w-6 text-muted-foreground hover:text-primary hover:bg-primary/10 flex-shrink-0"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation(); // Don't trigger the accordion toggle
+
+                                                                            const newIndex = allTypeRules.length; // Append to original array
+                                                                            const newRule = navType.id === 'global'
+                                                                                ? { name: `New ${navType.label}`, purpose: '', layouts: { mobile: 'Bottom Tab Bar', tablet: 'Sidebar', desktop: 'Top Nav' }, order_of_screens: [], display_in: [] }
+                                                                                : { where: 'app-wide', description: `New ${navType.label} Rule`, target: '' };
+
+                                                                            setGraph((prev: any) => {
+                                                                                const next = JSON.parse(JSON.stringify(prev));
+                                                                                if (!next.structure.edges.navigationRules[navType.id]) {
+                                                                                    next.structure.edges.navigationRules[navType.id] = [];
+                                                                                }
+                                                                                next.structure.edges.navigationRules[navType.id].push(newRule);
+                                                                                return next;
+                                                                            });
+
+                                                                            // Ensure section is open and open the editor
+                                                                            setExpandedNavSections(prev => new Set(prev).add(navType.id));
+                                                                            setSelectedNode({ type: 'NavRuleEdit', ruleType: navType.id, index: newIndex, rule: newRule });
+                                                                        }}
+                                                                    >
+                                                                        <Plus size={12} />
+                                                                    </Button>
+                                                                </div>
+
+                                                                {isExpanded && (
+                                                                    <div className="px-4 pb-3 space-y-1 animate-in slide-in-from-top-1 duration-200">
+                                                                        <p className="text-[10px] text-muted-foreground italic mb-2 px-1">{navType.desc}</p>
+
+                                                                        {displayRules.length === 0 && (
+                                                                            <div className="text-[10px] text-muted-foreground italic p-2 text-center border border-dashed rounded-md bg-slate-50/50 dark:bg-zinc-800/50">
+                                                                                No app-wide rules for {navType.label} Navigation
+                                                                            </div>
+                                                                        )}
+
+                                                                        {displayRules.map((rule: any, idx: number) => {
+                                                                            // Find the real index in the unfiltered array so the sidebar editor updates the correct rule
+                                                                            const realIndex = allTypeRules.findIndex((r: any) => r === rule);
+
+                                                                            return (
+                                                                                <div
+                                                                                    key={`${navType.id}-${idx}`}
+                                                                                    onClick={() => setSelectedNode({ type: 'NavRuleEdit', rule, ruleType: navType.id, index: realIndex })}
+                                                                                    className="flex items-center gap-3 p-2 rounded-md border border-transparent hover:border-primary/20 hover:bg-primary/5 cursor-pointer group/rule active:scale-[0.99] transition-all"
+                                                                                >
+                                                                                    <div className="flex-1 min-w-0">
+                                                                                        <div className="text-[11px] font-medium truncate">{rule.name || rule.description || 'New Navigation Rule'}</div>
+                                                                                        <div className="flex gap-2 mt-0.5 flex-wrap">
+                                                                                            {navType.id === 'global' ? (
+                                                                                                <span className="text-[9px] text-muted-foreground">• {rule.layouts?.desktop || 'No layout'} (Desktop)</span>
+                                                                                            ) : (
+                                                                                                <>
+                                                                                                    {rule.target && <span className="text-[9px] text-blue-500 font-bold">→ {getNodeById(rule.target)?.name || 'External'}</span>}
+                                                                                                    <span className="text-[9px] text-muted-foreground">• Shown in: App-Wide</span>
+                                                                                                </>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
                                         )}
-                                    </>
+
+                                        <div className="flex flex-wrap gap-8 items-start justify-center w-full">
+                                            {graph.structure?.nodes?.screens?.filter((s: any) => {
+                                                // Only show top-level screens (parent === 'body')
+                                                if (s.parent !== 'body') return false;
+
+                                                // If functionality view is ON, only show screens that are "active"
+                                                if (showFunctionality && activeFunction) {
+                                                    return isNodeActive(s.id);
+                                                }
+
+                                                // Otherwise show all top-level screens
+                                                return true;
+                                            }).map((screen: any) => renderStandardNode(screen, 0))}
+
+                                            {/* Hide 'Add Screen' button when focusing on a specific functionality to keep the view clean */}
+                                            {(!showFunctionality || !activeFunction) && (
+                                                <div
+                                                    onClick={() => setSelectedNode({ type: 'NewNode', isScreen: true, parent: 'body', name: '', purpose: '', styles: '', connectedTo: '' })}
+                                                    /* Changed min-h-[150px] to min-h-[124px] so it perfectly matches an empty screen card */
+                                                    className="w-80 self-stretch border-2 border-dashed border-border hover:border-primary/50 rounded-xl flex items-center justify-center p-6 cursor-pointer text-muted-foreground hover:text-primary transition-colors min-h-[124px]"
+                                                >
+                                                    + Add Screen
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
                                 )}
                             </div>
                         </div>
@@ -1768,9 +2100,95 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                         </div>
                                     </div>
 
+                                    {/* --- NAVIGATION RULES UI --- */}
+                                    <div className="mt-6 border-t pt-4">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <span className="text-xs font-bold uppercase text-primary tracking-wider">Navigation Rules</span>
+                                        </div>
+
+                                        {/* Display Existing Rules */}
+                                        <div className="space-y-2 mb-4 max-h-40 overflow-y-auto pr-1">
+                                            {navTypes.flatMap(type => {
+                                                const rules = graph.structure?.edges?.navigationRules?.[type] || [];
+                                                return rules
+                                                    .map((r, i: number) => ({ ...r, type, index: i }))
+                                                    .filter((r) => r.where === selectedNode.id)
+                                                    .map((r) => (
+                                                        <div key={`${r.type}-${r.index}`} className="flex justify-between items-start bg-slate-50 dark:bg-zinc-800 border rounded p-2 text-xs">
+                                                            <div className="flex-1 pr-2">
+                                                                <div className="uppercase text-[9px] font-bold text-primary mb-0.5">{NAV_TYPES.find(t => t.id === r.type)?.label || r.type}</div>
+                                                                <div className="text-muted-foreground leading-tight">{r.description}</div>
+                                                                {r.target && <div className="text-[10px] text-blue-500 mt-1">→ {getNodeById(r.target)?.name || r.target}</div>}
+                                                            </div>
+                                                            <Button variant="ghost" size="icon" className="h-5 w-5 text-red-500 hover:bg-red-100 flex-shrink-0" onClick={() => {
+                                                                setGraph((prev: any) => {
+                                                                    const next = JSON.parse(JSON.stringify(prev));
+                                                                    next.structure.edges.navigationRules[r.type].splice(r.index, 1);
+                                                                    return next;
+                                                                });
+                                                            }}>
+                                                                <Trash2 size={10} />
+                                                            </Button>
+                                                        </div>
+                                                    ));
+                                            })}
+                                        </div>
+
+                                        {/* Add New Rule Form */}
+                                        <div className="bg-slate-50 dark:bg-zinc-800/50 p-3 rounded-lg border border-border/50 space-y-3">
+                                            <p className="text-[10px] text-muted-foreground leading-tight">Add links/routes originating from this node.</p>
+
+                                            <div>
+                                                <select
+                                                    className="w-full bg-white dark:bg-zinc-800 border rounded-md px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary"
+                                                    value={navRuleDraft.type}
+                                                    onChange={(e) => setNavRuleDraft({ ...navRuleDraft, type: e.target.value })}
+                                                >
+                                                    {NAV_TYPES.filter(t => t.id !== 'global').map(t => (
+                                                        <option key={t.id} value={t.id}>{t.label}</option>
+                                                    ))}
+                                                </select>
+                                                <p className="text-[9px] text-muted-foreground mt-1 ml-1 italic">{NAV_TYPES.find(t => t.id === navRuleDraft.type)?.desc}</p>
+                                            </div>
+
+                                            <select
+                                                className="w-full bg-white dark:bg-zinc-800 border rounded-md px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary"
+                                                value={navRuleDraft.target}
+                                                onChange={(e) => setNavRuleDraft({ ...navRuleDraft, target: e.target.value })}
+                                            >
+                                                <option value="">No specific target (External/Dynamic)</option>
+                                                {[...(graph.structure?.nodes?.screens || []), ...(graph.structure?.nodes?.components || [])].map(n => (
+                                                    <option key={n.id} value={n.id}>{n.name}</option>
+                                                ))}
+                                            </select>
+
+                                            <textarea
+                                                placeholder="Description (e.g., Link to Help Center)"
+                                                className="w-full bg-white dark:bg-zinc-800 border rounded-md px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary min-h-[50px]"
+                                                value={navRuleDraft.description}
+                                                onChange={(e) => setNavRuleDraft({ ...navRuleDraft, description: e.target.value })}
+                                            />
+
+                                            <Button size="sm" variant="secondary" className="w-full text-xs h-7 border border-border" disabled={!navRuleDraft.description} onClick={() => {
+                                                setGraph((prev: any) => {
+                                                    const next = JSON.parse(JSON.stringify(prev));
+                                                    if (!next.structure.edges.navigationRules) next.structure.edges.navigationRules = {};
+                                                    if (!next.structure.edges.navigationRules[navRuleDraft.type]) next.structure.edges.navigationRules[navRuleDraft.type] = [];
+
+                                                    next.structure.edges.navigationRules[navRuleDraft.type].push({
+                                                        where: selectedNode.parent === 'body' ? { screen: selectedNode.id } : { component: selectedNode.id },
+                                                        description: navRuleDraft.description,
+                                                        ...(navRuleDraft.target ? { target: navRuleDraft.target } : {})
+                                                    });
+                                                    return next;
+                                                });
+                                                setNavRuleDraft({ type: 'local', target: '', description: '' });
+                                            }}>+ Add Rule</Button>
+                                        </div>
+                                    </div>
+
                                     <div className="pt-4 border-t flex justify-end gap-2 mt-4">
-                                        <Button variant="outline" size="sm" onClick={() => setSelectedNode(null)}>Cancel</Button>
-                                        <Button size="sm" onClick={() => setSelectedNode(null)}>Save</Button>
+                                        <Button variant="outline" size="sm" onClick={() => setSelectedNode(null)}>Close</Button>
                                     </div>
                                 </>
                             )}
@@ -1807,16 +2225,7 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                         </div>
                                     </div>
 
-                                    <div className="mt-3">
-                                        <label className="text-xs font-semibold text-muted-foreground mb-1 block">Connected to Node (Navigation)</label>
-                                        <select className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.connectedTo} onChange={(e) => setSelectedNode({ ...selectedNode, connectedTo: e.target.value })}>
-                                            <option value="">None</option>
-                                            {[...(graph.structure?.nodes?.screens || []), ...(graph.structure?.nodes?.components || [])].map(n => (
-                                                <option key={n.id} value={n.id}>{n.name} ({n.id.startsWith('screen') ? 'Screen' : 'Component'})</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div className="pt-4 border-t flex justify-end gap-2 mt-4">
+                                    <div className="pt-4 border-t flex justify-end gap-2 mt-6">
                                         <Button variant="outline" size="sm" onClick={() => setSelectedNode(null)}>Cancel</Button>
                                         <Button size="sm" onClick={() => {
                                             if (!selectedNode.name) return;
@@ -1828,14 +2237,10 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                                 if (selectedNode.isScreen) next.structure.nodes.screens.push(newNode);
                                                 else next.structure.nodes.components.push(newNode);
 
-                                                if (selectedNode.connectedTo) {
-                                                    if (!next.structure.edges.navigation) next.structure.edges.navigation = [];
-                                                    next.structure.edges.navigation.push({ fromComponentId: newId, toScreenId: selectedNode.connectedTo });
-                                                }
                                                 return next;
                                             });
                                             setSelectedNode(null);
-                                        }}>Done</Button>
+                                        }}>Create Node</Button>
                                     </div>
                                 </>
                             )}
@@ -1951,6 +2356,129 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                         <Button onClick={savePersonaDraft}>Save Persona</Button>
                                     </div>
                                 </>
+                            )}
+                            {/* Inside your Sidebar rendering logic */}
+                            {selectedNode.type === 'NavRuleEdit' && (
+                                <div className="space-y-6">
+                                    {selectedNode.ruleType === 'global' ? (
+                                        <>
+                                            <div>
+                                                <label className="text-xs font-bold text-muted-foreground uppercase block mb-2">Menu Name</label>
+                                                <input
+                                                    className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm"
+                                                    value={selectedNode.rule.name || ''}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        setGraph((prev: any) => {
+                                                            const next = JSON.parse(JSON.stringify(prev));
+                                                            next.structure.edges.navigationRules.global[selectedNode.index].name = val;
+                                                            return next;
+                                                        });
+                                                        setSelectedNode((prev: any) => ({ ...prev, rule: { ...prev.rule, name: val } }));
+                                                    }}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-bold text-muted-foreground uppercase block mb-2">Purpose</label>
+                                                <textarea
+                                                    className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm min-h-[60px]"
+                                                    value={selectedNode.rule.purpose || ''}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        setGraph((prev: any) => {
+                                                            const next = JSON.parse(JSON.stringify(prev));
+                                                            next.structure.edges.navigationRules.global[selectedNode.index].purpose = val;
+                                                            return next;
+                                                        });
+                                                        setSelectedNode((prev: any) => ({ ...prev, rule: { ...prev.rule, purpose: val } }));
+                                                    }}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-bold text-muted-foreground uppercase block mb-2">Layouts</label>
+                                                <div className="space-y-2">
+                                                    {['mobile', 'tablet', 'desktop'].map((device) => (
+                                                        <div key={device} className="flex items-center gap-2">
+                                                            <span className="text-[10px] uppercase w-16 text-muted-foreground">{device}:</span>
+                                                            <input
+                                                                className="flex-1 bg-slate-50 dark:bg-zinc-800 border rounded-md px-2 py-1 text-xs"
+                                                                value={selectedNode.rule.layouts?.[device] || ''}
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    setGraph((prev: any) => {
+                                                                        const next = JSON.parse(JSON.stringify(prev));
+                                                                        if (!next.structure.edges.navigationRules.global[selectedNode.index].layouts) {
+                                                                            next.structure.edges.navigationRules.global[selectedNode.index].layouts = {};
+                                                                        }
+                                                                        next.structure.edges.navigationRules.global[selectedNode.index].layouts[device] = val;
+                                                                        return next;
+                                                                    });
+                                                                    setSelectedNode((prev: any) => ({
+                                                                        ...prev,
+                                                                        rule: { ...prev.rule, layouts: { ...prev.rule.layouts, [device]: val } }
+                                                                    }));
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div>
+                                                <label className="text-xs font-bold text-muted-foreground uppercase block mb-2">Display Location</label>
+                                                <select
+                                                    className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm"
+                                                    value={selectedNode.rule.where || ''}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        setGraph((prev: any) => {
+                                                            const next = JSON.parse(JSON.stringify(prev));
+                                                            next.structure.edges.navigationRules[selectedNode.ruleType][selectedNode.index].where = val;
+                                                            return next;
+                                                        });
+                                                        setSelectedNode((prev: any) => ({ ...prev, rule: { ...prev.rule, where: val } }));
+                                                    }}
+                                                >
+                                                    <option value="app-wide">Everywhere (App-Wide)</option>
+                                                    <optgroup label="Specific Screens">
+                                                        {graph.structure?.nodes?.screens?.map((s: any) => (
+                                                            <option key={s.id} value={s.id}>{s.name}</option>
+                                                        ))}
+                                                    </optgroup>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-bold text-muted-foreground uppercase block mb-2">Description</label>
+                                                <textarea
+                                                    className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm min-h-[100px]"
+                                                    value={selectedNode.rule.description || ''}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        setGraph((prev: any) => {
+                                                            const next = JSON.parse(JSON.stringify(prev));
+                                                            next.structure.edges.navigationRules[selectedNode.ruleType][selectedNode.index].description = val;
+                                                            return next;
+                                                        });
+                                                        setSelectedNode((prev: any) => ({ ...prev, rule: { ...prev.rule, description: val } }));
+                                                    }}
+                                                />
+                                            </div>
+                                        </>
+                                    )}
+
+                                    <Button variant="destructive" size="sm" className="w-full" onClick={() => {
+                                        setGraph((prev: any) => {
+                                            const next = JSON.parse(JSON.stringify(prev));
+                                            next.structure.edges.navigationRules[selectedNode.ruleType].splice(selectedNode.index, 1);
+                                            return next;
+                                        });
+                                        setSelectedNode(null);
+                                    }}>
+                                        Delete Navigation Rule
+                                    </Button>
+                                </div>
                             )}
                             {/* Editor fields for Functionalities */}
                             {selectedNode.type === 'FunctionalityForm' && (
