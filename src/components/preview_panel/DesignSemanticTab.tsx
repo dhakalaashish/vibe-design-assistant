@@ -153,7 +153,7 @@ interface Surface {
         typography: string;
         background_color: string;
         layout: NodeStyle['layout'];
-        interactions: Record<string, string>;
+        interactions: string[];
         accessibility: {
             keyboard: string[];
             visualHierarchy: string;
@@ -370,8 +370,30 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
 
     const [parseError, setParseError] = useState<string | null>(null);
 
-    const [expandedNavSections, setExpandedNavSections] = useState<Set<string>>(new Set(['local'])); // Default local open
-    const [draggedRuleInfo, setDraggedRuleInfo] = useState<{ type: string; index: number } | null>(null);
+    const [expandedNavSections, setExpandedNavSections] = useState<Set<string>>(new Set(['global'])); // Default local open
+    const [expandedStyleSections, setExpandedStyleSections] = useState<Set<string>>(new Set([]));
+
+    const toggleStyleSection = (id: string) => {
+        setExpandedStyleSections(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const getInheritedStyles = (nodeId: string): { source: string, styles: any } => {
+        let currentId = nodeId;
+        while (currentId && currentId !== 'body') {
+            const node = getNodeById(currentId);
+            // If the node has styles and it's not empty, return them (skip checking itself on the first pass)
+            if (node && node.styles && Object.keys(node.styles).length > 0 && currentId !== nodeId) {
+                return { source: node.name, styles: node.styles };
+            }
+            currentId = node?.parent || 'body';
+        }
+        return { source: 'App Wide Styles', styles: graph?.surface?.global_styles || {} };
+    };
 
     useEffect(() => {
         try {
@@ -531,6 +553,35 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                     globalRule.layouts[key] = inlineEdit.value;
                 }
             }
+
+            // --- NEW: Handle Global Styles Inline Editing ---
+            if (inlineEdit.field.startsWith('globalStyle_')) {
+                if (!next.surface) next.surface = {};
+                if (!next.surface.global_styles) next.surface.global_styles = {};
+
+                if (inlineEdit.field === 'globalStyle_accessibility_keyboard' || inlineEdit.field === 'globalStyle_interactions') {
+                    if (inlineEdit.field === 'globalStyle_accessibility_keyboard') {
+                        if (!next.surface.global_styles.accessibility) next.surface.global_styles.accessibility = {};
+                        if (!next.surface.global_styles.accessibility.keyboard) next.surface.global_styles.accessibility.keyboard = [];
+                        if (inlineEdit.index !== undefined) next.surface.global_styles.accessibility.keyboard[inlineEdit.index] = inlineEdit.value;
+                        else next.surface.global_styles.accessibility.keyboard.push(inlineEdit.value);
+                    } else {
+                        if (!next.surface.global_styles.interactions) next.surface.global_styles.interactions = [];
+                        if (inlineEdit.index !== undefined) next.surface.global_styles.interactions[inlineEdit.index] = inlineEdit.value;
+                        else next.surface.global_styles.interactions.push(inlineEdit.value);
+                    }
+                } else {
+                    // Split the path (e.g., 'layout_mobile' becomes ['layout', 'mobile'])
+                    const path = inlineEdit.field.replace('globalStyle_', '').split('_');
+                    if (path.length === 1) {
+                        next.surface.global_styles[path[0]] = inlineEdit.value;
+                    } else if (path.length === 2) {
+                        if (!next.surface.global_styles[path[0]]) next.surface.global_styles[path[0]] = {};
+                        next.surface.global_styles[path[0]][path[1]] = inlineEdit.value;
+                    }
+                }
+            }
+
             return next;
         });
         setInlineEdit(null);
@@ -978,11 +1029,61 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                 });
                         })
                     )}
-                    {showStyles && node.styles && (
-                        <div className="text-[10px] text-amber-600 dark:text-amber-500 font-medium font-mono truncate">
-                            Styles: {typeof node.styles === 'object' ? Object.entries(node.styles).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(' | ') : String(node.styles)}
-                        </div>
-                    )}
+                    {showStyles && (() => {
+                        const inherited = getInheritedStyles(node.id);
+
+                        // Filter out non-style metadata
+                        const ignoreKeys = ['purpose', 'interactions', 'accessibility'];
+                        const validOwnKeys = Object.keys(node.styles || {}).filter(k => !ignoreKeys.includes(k));
+                        const hasOwn = validOwnKeys.length > 0;
+
+                        const sourceName = hasOwn ? 'Own' : inherited.source;
+
+                        return (
+                            <div className="mt-2 flex flex-wrap gap-1.5 items-center">
+                                {/* Show either the inheritance text OR the unique styles header BEFORE mapping */}
+                                {!hasOwn ? (
+                                    <span className="text-[9px] opacity-70 italic font-sans text-muted-foreground flex-shrink-0">
+                                        ↳ Inherits styles from {sourceName}
+                                    </span>
+                                ) : (
+                                    <span className="text-[9px] opacity-70 italic font-sans text-muted-foreground flex-shrink-0">
+                                        ↳ Unique Styles for this and its children:
+                                    </span>
+                                )}
+
+                                {/* Only map and show badges if the node has its own styles */}
+                                {hasOwn && Object.entries(node.styles || {})
+                                    .filter(([k]) => !ignoreKeys.includes(k))
+                                    .map(([k, v], idx) => {
+                                        // Safely extract a clean string if the value is an object or array
+                                        let displayVal = String(v);
+                                        if (typeof v === 'object' && v !== null) {
+                                            if (Array.isArray(v)) {
+                                                displayVal = `[${v.length} items]`;
+                                            } else {
+                                                const obj = v as any; // Cast to 'any' to bypass TS error
+                                                displayVal = obj.desktop || obj.mobile || obj.element || '{...}';
+                                            }
+                                        }
+
+                                        // Condense long keys (e.g., 'background_color' -> 'background')
+                                        const shortKey = k.replace('_color', '');
+
+                                        return (
+                                            <span
+                                                key={idx}
+                                                className="inline-flex items-center bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded text-[9px] border border-amber-200/60 dark:border-amber-800/50 font-mono"
+                                                title={typeof v === 'string' ? v : 'Complex object'}
+                                            >
+                                                <span className="opacity-50 mr-1">[{shortKey}]</span>
+                                                <span className="truncate max-w-[80px]">{displayVal}</span>
+                                            </span>
+                                        );
+                                    })}
+                            </div>
+                        );
+                    })()}
                 </div>
 
                 {isExpanded && hasChildren && (
@@ -1200,7 +1301,61 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                                         <div className="px-3 pb-3 pt-1 space-y-1 border-t border-dashed bg-slate-50 dark:bg-zinc-800/50 rounded-b-xl">
                                                             {showNav && incomingNavs.length > 0 && incomingNavs.map((n: any, i: number) => <div key={i} className="text-[10px] text-blue-600 font-medium truncate">← {getNodeById(n.fromComponentId)?.name || 'Unknown'}</div>)}
                                                             {showNav && outgoingNavs.length > 0 && outgoingNavs.map((n: any, i: number) => <div key={i} className="text-[10px] text-emerald-600 font-medium truncate">→ {getNodeById(n.toScreenId)?.name || 'Unknown'}</div>)}
-                                                            {showStyles && node.styles && <div className="text-[10px] text-amber-600 dark:text-amber-500 font-medium font-mono truncate mt-1">Sty: {typeof node.styles === 'object' ? Object.entries(node.styles).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(' | ') : String(node.styles)}</div>}
+                                                            {showStyles && (() => {
+                                                                const inherited = getInheritedStyles(node.id);
+
+                                                                // Filter out non-style metadata
+                                                                const ignoreKeys = ['purpose', 'interactions', 'accessibility'];
+                                                                const validOwnKeys = Object.keys(node.styles || {}).filter(k => !ignoreKeys.includes(k));
+                                                                const hasOwn = validOwnKeys.length > 0;
+
+                                                                const sourceName = hasOwn ? 'Own' : inherited.source;
+
+                                                                return (
+                                                                    <div className="mt-2 flex flex-wrap gap-1.5 items-center">
+                                                                        {/* Show either the inheritance text OR the unique styles header BEFORE mapping */}
+                                                                        {!hasOwn ? (
+                                                                            <span className="text-[9px] opacity-70 italic font-sans text-muted-foreground flex-shrink-0">
+                                                                                ↳ Inherits styles from {sourceName}
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span className="text-[9px] opacity-70 italic font-sans text-muted-foreground flex-shrink-0">
+                                                                                ↳ Unique Styles for this and its children:
+                                                                            </span>
+                                                                        )}
+
+                                                                        {/* Only map and show badges if the node has its own styles */}
+                                                                        {hasOwn && Object.entries(node.styles || {})
+                                                                            .filter(([k]) => !ignoreKeys.includes(k))
+                                                                            .map(([k, v], idx) => {
+                                                                                // Safely extract a clean string if the value is an object or array
+                                                                                let displayVal = String(v);
+                                                                                if (typeof v === 'object' && v !== null) {
+                                                                                    if (Array.isArray(v)) {
+                                                                                        displayVal = `[${v.length} items]`;
+                                                                                    } else {
+                                                                                        const obj = v as any; // Cast to 'any' to bypass TS error
+                                                                                        displayVal = obj.desktop || obj.mobile || obj.element || '{...}';
+                                                                                    }
+                                                                                }
+
+                                                                                // Condense long keys (e.g., 'background_color' -> 'background')
+                                                                                const shortKey = k.replace('_color', '');
+
+                                                                                return (
+                                                                                    <span
+                                                                                        key={idx}
+                                                                                        className="inline-flex items-center bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded text-[9px] border border-amber-200/60 dark:border-amber-800/50 font-mono"
+                                                                                        title={typeof v === 'string' ? v : 'Complex object'}
+                                                                                    >
+                                                                                        <span className="opacity-50 mr-1">[{shortKey}]</span>
+                                                                                        <span className="truncate max-w-[80px]">{displayVal}</span>
+                                                                                    </span>
+                                                                                );
+                                                                            })}
+                                                                    </div>
+                                                                );
+                                                            })()}
                                                         </div>
                                                     )}
                                                 </div>
@@ -1910,7 +2065,7 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                                 <div className="divide-y divide-border/40">
                                                     {NAV_TYPES.map((navType) => {
                                                         // 1. Get all rules, then filter non-globals to ONLY show 'app-wide'
-                                                        const allTypeRules = graph.structure?.edges?.navigationRules?.[navType.id as string] || [];
+                                                        const allTypeRules = graph.structure?.edges?.navigationRules?.[navType.id as NavRuleType] || [];
                                                         const displayRules = navType.id === 'global'
                                                             ? allTypeRules
                                                             : allTypeRules.filter((r: any) => r.where === 'app-wide');
@@ -1927,8 +2082,8 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
 
                                                                     <Button
                                                                         variant="ghost"
-                                                                        size="icon"
-                                                                        className="ml-auto h-6 w-6 text-muted-foreground hover:text-primary hover:bg-primary/10 flex-shrink-0"
+                                                                        size="sm"
+                                                                        className="ml-auto h-6 px-2 text-[10px] text-muted-foreground hover:text-primary hover:bg-primary/10 flex-shrink-0 font-medium"
                                                                         onClick={(e) => {
                                                                             e.stopPropagation(); // Don't trigger the accordion toggle
 
@@ -1951,7 +2106,8 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                                                             setSelectedNode({ type: 'NavRuleEdit', ruleType: navType.id, index: newIndex, rule: newRule });
                                                                         }}
                                                                     >
-                                                                        <Plus size={12} />
+                                                                        <Plus size={10} className="mr-1" />
+                                                                        Add New
                                                                     </Button>
                                                                 </div>
 
@@ -1997,6 +2153,295 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                                         );
                                                     })}
                                                 </div>
+                                            </div>
+                                        )}
+
+                                        {/* --- ALL STYLES (LIBRARY) --- */}
+                                        {(!showFunctionality || !activeFunction) && showStyles && (
+                                            <div className="w-full bg-white dark:bg-zinc-900 border border-border rounded-xl shadow-sm mb-4 overflow-hidden">
+                                                <div className="bg-slate-50 dark:bg-zinc-800/50 px-4 py-3 border-b flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-amber-500">🎨</span>
+                                                        <h3 className="text-xs font-bold uppercase tracking-widest">All Styles</h3>
+                                                    </div>
+                                                    <span className="text-[10px] text-muted-foreground italic font-medium">Style Library</span>
+                                                </div>
+
+                                                <div className="divide-y divide-border/40">
+                                                    {/* Colors */}
+                                                    <div className="group/section">
+                                                        <div className="w-full px-4 py-2 flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors cursor-pointer" onClick={() => toggleStyleSection('colors')}>
+                                                            {expandedStyleSections.has('colors') ? <ChevronDown size={14} className="flex-shrink-0" /> : <ChevronRight size={14} className="flex-shrink-0" />}
+                                                            <span className="text-xs font-semibold flex-shrink-0">Colors</span>
+                                                            <span className="bg-muted text-[10px] px-1.5 py-0.5 rounded-full opacity-60 ml-auto">{Object.keys(graph.surface?.all_styles?.colors || {}).length}</span>
+                                                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary hover:bg-primary/10 flex-shrink-0" onClick={(e) => { e.stopPropagation(); setExpandedStyleSections(prev => new Set(prev).add('colors')); setSelectedNode({ type: 'ColorStyleEdit', isNew: true, colorKey: '', colorData: { name: 'New Color', color: '#000000' } }); }}>
+                                                                <Plus size={12} />
+                                                            </Button>
+                                                        </div>
+                                                        {expandedStyleSections.has('colors') && (
+                                                            <div className="px-4 pb-3 space-y-1 animate-in slide-in-from-top-1">
+                                                                {Object.entries(graph.surface?.all_styles?.colors || {}).map(([k, v]: any) => (
+                                                                    <div key={k} onClick={() => setSelectedNode({ type: 'ColorStyleEdit', isNew: false, colorKey: k, colorData: v })} className="flex items-center gap-3 p-2 rounded-md hover:bg-primary/5 cursor-pointer border border-transparent hover:border-primary/20 transition-all">
+                                                                        <div className="w-4 h-4 rounded-full border shadow-sm" style={{ backgroundColor: v.color }}></div>
+                                                                        <div className="text-[11px] font-bold">{v.name} <span className="text-[9px] font-normal text-muted-foreground ml-1">({k})</span></div>
+                                                                        <div className="text-[10px] font-mono text-muted-foreground ml-auto">{v.color}</div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Typography */}
+                                                    <div className="group/section">
+                                                        <div className="w-full px-4 py-2 flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors cursor-pointer" onClick={() => toggleStyleSection('typography')}>
+                                                            {expandedStyleSections.has('typography') ? <ChevronDown size={14} className="flex-shrink-0" /> : <ChevronRight size={14} className="flex-shrink-0" />}
+                                                            <span className="text-xs font-semibold flex-shrink-0">Typography</span>
+                                                            <span className="bg-muted text-[10px] px-1.5 py-0.5 rounded-full opacity-60 ml-auto">{Object.keys(graph.surface?.all_styles?.typography?.hierarchy || {}).length}</span>
+                                                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary hover:bg-primary/10 flex-shrink-0" onClick={(e) => { e.stopPropagation(); setExpandedStyleSections(prev => new Set(prev).add('typography')); setSelectedNode({ type: 'TypographyStyleEdit', isNew: true, typoKey: '', typoData: { element: 'New Element', size: '16px', weight: 'Regular', lineHeight: '1.5', usage: '' } }); }}>
+                                                                <Plus size={12} />
+                                                            </Button>
+                                                        </div>
+                                                        {expandedStyleSections.has('typography') && (
+                                                            <div className="px-4 pb-3 space-y-1 animate-in slide-in-from-top-1">
+                                                                <div className="text-[10px] text-muted-foreground mb-2 px-1 flex justify-between">
+                                                                    <span>Family: <strong>{graph.surface?.all_styles?.typography?.family || 'Inter'}</strong></span>
+                                                                </div>
+                                                                {Object.entries(graph.surface?.all_styles?.typography?.hierarchy || {}).map(([k, v]: any) => (
+                                                                    <div key={k} onClick={() => setSelectedNode({ type: 'TypographyStyleEdit', isNew: false, typoKey: k, typoData: v })} className="flex flex-col gap-1 p-2 rounded-md hover:bg-primary/5 cursor-pointer border border-transparent hover:border-primary/20 transition-all">
+                                                                        <div className="flex justify-between items-center">
+                                                                            <div className="text-[11px] font-bold">{v.element} <span className="text-[9px] font-normal text-muted-foreground">({k})</span></div>
+                                                                            <div className="text-[9px] bg-muted/50 px-1.5 py-0.5 rounded font-mono">{v.size} / {v.weight}</div>
+                                                                        </div>
+                                                                        <div className="text-[10px] text-muted-foreground truncate">{v.usage}</div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* --- APP WIDE STYLES (DEFAULTS) --- */}
+                                        {(!showFunctionality || !activeFunction) && showStyles && (
+                                            <div className="w-full bg-white dark:bg-zinc-900 border border-border rounded-xl shadow-sm mb-8 overflow-hidden">
+                                                {/* Clickable Header for Collapsing/Expanding */}
+                                                <div
+                                                    className="bg-slate-50 dark:bg-zinc-800/50 px-4 py-3 border-b flex items-center justify-between cursor-pointer hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+                                                    onClick={() => toggleStyleSection('global_styles')}
+                                                >
+                                                    <div className="flex items-center gap-2">
+                                                        {expandedStyleSections.has('global_styles') ? <ChevronDown size={14} className="flex-shrink-0 text-muted-foreground" /> : <ChevronRight size={14} className="flex-shrink-0 text-muted-foreground" />}
+                                                        <span className="text-emerald-500">✨</span>
+                                                        <h3 className="text-xs font-bold uppercase tracking-widest">App Wide Styles</h3>
+                                                    </div>
+                                                    <span className="text-[10px] text-muted-foreground italic font-medium">Default Theme: Every screen or component inherits their nearest parent's styles, if not this default</span>
+                                                </div>
+
+                                                {/* Collapsible Content Body */}
+                                                {expandedStyleSections.has('global_styles') && (
+                                                    <div className="p-6 space-y-6 animate-in slide-in-from-top-1 duration-200">
+                                                        {/* Base Theme Attributes */}
+                                                        <div onClick={() => setSelectedNode({ type: 'GlobalStyleEdit', data: graph.surface?.global_styles })} className="p-3 rounded-md hover:bg-primary/5 border border-border/50 cursor-pointer transition-all bg-slate-50/50 dark:bg-zinc-800/50">
+                                                            <div className="text-[11px] font-bold mb-2 text-primary flex items-center justify-between">Base Theme Attributes <Edit2 size={10} /></div>
+                                                            <div className="grid grid-cols-2 gap-2 text-[10px] text-muted-foreground">
+                                                                <div className="bg-white dark:bg-zinc-900 p-1.5 rounded border shadow-sm">Primary Color: <strong className="text-foreground">{graph.surface?.global_styles?.color}</strong></div>
+                                                                <div className="bg-white dark:bg-zinc-900 p-1.5 rounded border shadow-sm">Background: <strong className="text-foreground">{graph.surface?.global_styles?.background_color}</strong></div>
+                                                                <div className="bg-white dark:bg-zinc-900 p-1.5 rounded border shadow-sm col-span-2">Typography: <strong className="text-foreground">{graph.surface?.global_styles?.typography}</strong></div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                                            {/* Layouts */}
+                                                            <div className="space-y-4">
+                                                                <h4 className="text-sm font-bold border-b pb-2">Layout</h4>
+                                                                {renderInlineField("Mobile (< 768px)", "globalStyle_layout_mobile", graph.surface?.global_styles?.layout?.mobile || '', true)}
+                                                                {renderInlineField("Tablet (768px - 1024px)", "globalStyle_layout_tablet", graph.surface?.global_styles?.layout?.tablet || '', true)}
+                                                                {renderInlineField("Desktop (> 1024px)", "globalStyle_layout_desktop", graph.surface?.global_styles?.layout?.desktop || '', true)}
+                                                                {renderInlineField("Grid System", "globalStyle_layout_grid", graph.surface?.global_styles?.layout?.grid || '', true)}
+                                                            </div>
+
+                                                            {/* Interactions */}
+                                                            <div className="space-y-4 pt-2">
+                                                                <h4 className="text-sm font-bold border-b pb-2">Interactions</h4>
+                                                                <div>
+                                                                    <div className="space-y-2">
+                                                                        {graph.surface?.global_styles?.interactions?.map((item: string, i: number) => {
+                                                                            const isEditing = inlineEdit?.field === 'globalStyle_interactions' && inlineEdit.index === i;
+                                                                            return isEditing ? (
+                                                                                <div key={i} className="relative p-2 -mx-2 border border-primary/50 rounded-lg bg-white dark:bg-zinc-900 shadow-sm flex items-start">
+                                                                                    <textarea
+                                                                                        className="w-full bg-transparent border-none text-sm leading-relaxed p-0 pr-8 focus:ring-0 outline-none resize-none overflow-hidden block m-0"
+                                                                                        value={inlineEdit.value}
+                                                                                        rows={1}
+                                                                                        onChange={e => {
+                                                                                            setInlineEdit({ ...inlineEdit, value: e.target.value });
+                                                                                            e.target.style.height = 'auto';
+                                                                                            e.target.style.height = `${e.target.scrollHeight}px`;
+                                                                                        }}
+                                                                                        onFocus={e => {
+                                                                                            e.target.style.height = 'auto';
+                                                                                            e.target.style.height = `${e.target.scrollHeight}px`;
+                                                                                        }}
+                                                                                        onBlur={saveInlineEdit}
+                                                                                        onKeyDown={(e) => {
+                                                                                            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveInlineEdit(); }
+                                                                                            else if (e.key === 'Escape') setInlineEdit(null);
+                                                                                        }}
+                                                                                        autoFocus
+                                                                                    />
+                                                                                </div>
+                                                                            ) : (
+                                                                                <div
+                                                                                    key={i}
+                                                                                    className="group relative flex justify-between items-start p-2 -mx-2 rounded-lg cursor-text hover:bg-black/5 dark:hover:bg-white/5 border border-transparent transition-colors"
+                                                                                    onClick={() => setInlineEdit({ field: 'globalStyle_interactions', value: item, index: i })}
+                                                                                    title="Click to edit rule"
+                                                                                >
+                                                                                    <p className="text-sm leading-relaxed text-muted-foreground w-full pr-8 m-0 p-0 whitespace-pre-wrap">• {item}</p>
+                                                                                    <div className="absolute right-2 top-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                                                                                        <Button
+                                                                                            size="icon" variant="ghost" className="h-6 w-6 text-red-600 hover:bg-red-100"
+                                                                                            onClick={(e) => {
+                                                                                                e.stopPropagation();
+                                                                                                setGraph((prev: any) => {
+                                                                                                    const next = JSON.parse(JSON.stringify(prev));
+                                                                                                    next.surface.global_styles.interactions.splice(i, 1);
+                                                                                                    return next;
+                                                                                                });
+                                                                                            }}
+                                                                                        >
+                                                                                            <Trash2 size={12} />
+                                                                                        </Button>
+                                                                                    </div>
+                                                                                </div>
+                                                                            );
+                                                                        })}
+
+                                                                        {inlineEdit?.field === 'globalStyle_interactions' && inlineEdit.index === undefined ? (
+                                                                            <div className="relative p-2 -mx-2 mt-1 border border-primary/50 rounded-lg bg-white dark:bg-zinc-900 shadow-sm flex items-start">
+                                                                                <textarea
+                                                                                    className="w-full bg-transparent border-none text-sm leading-relaxed p-0 pr-8 focus:ring-0 outline-none resize-none overflow-hidden block m-0"
+                                                                                    placeholder="New interaction rule..."
+                                                                                    value={inlineEdit.value}
+                                                                                    rows={1}
+                                                                                    onChange={e => {
+                                                                                        setInlineEdit({ ...inlineEdit, value: e.target.value });
+                                                                                        e.target.style.height = 'auto';
+                                                                                        e.target.style.height = `${e.target.scrollHeight}px`;
+                                                                                    }}
+                                                                                    onFocus={e => {
+                                                                                        e.target.style.height = 'auto';
+                                                                                        e.target.style.height = `${e.target.scrollHeight}px`;
+                                                                                    }}
+                                                                                    onBlur={saveInlineEdit}
+                                                                                    onKeyDown={(e) => {
+                                                                                        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveInlineEdit(); }
+                                                                                        else if (e.key === 'Escape') setInlineEdit(null);
+                                                                                    }}
+                                                                                    autoFocus
+                                                                                />
+                                                                            </div>
+                                                                        ) : (
+                                                                            <Button variant="outline" size="sm" className="mt-2 w-full border-dashed" onClick={() => setInlineEdit({ field: 'globalStyle_interactions', value: '' })}>+ Add Interaction</Button>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Accessibility */}
+                                                        <div className="space-y-4 pt-2">
+                                                            <h4 className="text-sm font-bold border-b pb-2">Accessibility</h4>
+                                                            {renderInlineField("Visual Hierarchy", "globalStyle_accessibility_visualHierarchy", graph.surface?.global_styles?.accessibility?.visualHierarchy || '', true)}
+
+                                                            <div>
+                                                                <span className="font-semibold text-muted-foreground uppercase text-xs tracking-wider block mb-2">Keyboard Navigation Rules</span>
+                                                                <div className="space-y-2">
+                                                                    {graph.surface?.global_styles?.accessibility?.keyboard?.map((item: string, i: number) => {
+                                                                        const isEditing = inlineEdit?.field === 'globalStyle_accessibility_keyboard' && inlineEdit.index === i;
+                                                                        return isEditing ? (
+                                                                            <div key={i} className="relative p-2 -mx-2 border border-primary/50 rounded-lg bg-white dark:bg-zinc-900 shadow-sm flex items-start">
+                                                                                <textarea
+                                                                                    className="w-full bg-transparent border-none text-sm leading-relaxed p-0 pr-8 focus:ring-0 outline-none resize-none overflow-hidden block m-0"
+                                                                                    value={inlineEdit.value}
+                                                                                    rows={1}
+                                                                                    onChange={e => {
+                                                                                        setInlineEdit({ ...inlineEdit, value: e.target.value });
+                                                                                        e.target.style.height = 'auto';
+                                                                                        e.target.style.height = `${e.target.scrollHeight}px`;
+                                                                                    }}
+                                                                                    onFocus={e => {
+                                                                                        e.target.style.height = 'auto';
+                                                                                        e.target.style.height = `${e.target.scrollHeight}px`;
+                                                                                    }}
+                                                                                    onBlur={saveInlineEdit}
+                                                                                    onKeyDown={(e) => {
+                                                                                        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveInlineEdit(); }
+                                                                                        else if (e.key === 'Escape') setInlineEdit(null);
+                                                                                    }}
+                                                                                    autoFocus
+                                                                                />
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div
+                                                                                key={i}
+                                                                                className="group relative flex justify-between items-start p-2 -mx-2 rounded-lg cursor-text hover:bg-black/5 dark:hover:bg-white/5 border border-transparent transition-colors"
+                                                                                onClick={() => setInlineEdit({ field: 'globalStyle_accessibility_keyboard', value: item, index: i })}
+                                                                                title="Click to edit rule"
+                                                                            >
+                                                                                <p className="text-sm leading-relaxed text-muted-foreground w-full pr-8 m-0 p-0 whitespace-pre-wrap">• {item}</p>
+                                                                                <div className="absolute right-2 top-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                                                                                    <Button
+                                                                                        size="icon" variant="ghost" className="h-6 w-6 text-red-600 hover:bg-red-100"
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation();
+                                                                                            setGraph((prev: any) => {
+                                                                                                const next = JSON.parse(JSON.stringify(prev));
+                                                                                                next.surface.global_styles.accessibility.keyboard.splice(i, 1);
+                                                                                                return next;
+                                                                                            });
+                                                                                        }}
+                                                                                    >
+                                                                                        <Trash2 size={12} />
+                                                                                    </Button>
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+
+                                                                    {inlineEdit?.field === 'globalStyle_accessibility_keyboard' && inlineEdit.index === undefined ? (
+                                                                        <div className="relative p-2 -mx-2 mt-1 border border-primary/50 rounded-lg bg-white dark:bg-zinc-900 shadow-sm flex items-start">
+                                                                            <textarea
+                                                                                className="w-full bg-transparent border-none text-sm leading-relaxed p-0 pr-8 focus:ring-0 outline-none resize-none overflow-hidden block m-0"
+                                                                                placeholder="New keyboard rule..."
+                                                                                value={inlineEdit.value}
+                                                                                rows={1}
+                                                                                onChange={e => {
+                                                                                    setInlineEdit({ ...inlineEdit, value: e.target.value });
+                                                                                    e.target.style.height = 'auto';
+                                                                                    e.target.style.height = `${e.target.scrollHeight}px`;
+                                                                                }}
+                                                                                onFocus={e => {
+                                                                                    e.target.style.height = 'auto';
+                                                                                    e.target.style.height = `${e.target.scrollHeight}px`;
+                                                                                }}
+                                                                                onBlur={saveInlineEdit}
+                                                                                onKeyDown={(e) => {
+                                                                                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveInlineEdit(); }
+                                                                                    else if (e.key === 'Escape') setInlineEdit(null);
+                                                                                }}
+                                                                                autoFocus
+                                                                            />
+                                                                        </div>
+                                                                    ) : (
+                                                                        <Button variant="outline" size="sm" className="mt-2 w-full border-dashed" onClick={() => setInlineEdit({ field: 'globalStyle_accessibility_keyboard', value: '' })}>+ Add Keyboard Rule</Button>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
 
@@ -2057,7 +2502,7 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                 {/* 4. Editable Context Panel (Sidebar) */}
                 {selectedNode && (
                     <div className="w-96 border-l bg-white dark:bg-zinc-900 shadow-2xl p-5 flex flex-col z-20 overflow-y-auto animate-in slide-in-from-right-8 border-t-0 border-r-0 border-b-0">
-                        <div className="flex justify-between items-center mb-6 pb-4 border-b">
+                        <div className="sticky -top-5 z-30 bg-white dark:bg-zinc-900 -mx-5 -mt-5 px-5 pt-5 pb-4 mb-6 border-b flex justify-between items-center">
                             <span className="text-xs font-bold uppercase tracking-wider text-primary">
                                 {selectedNode.type === 'PersonaForm' ? (personaDraft?.isNew ? 'Add Persona' : 'Edit Persona') :
                                     selectedNode.type === 'FunctionalityForm' ? (selectedNode.isNew ? 'Add Functionality' : 'Edit Functionality') :
@@ -2074,31 +2519,237 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                     <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Name</label><input className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.name} onChange={(e) => handleUpdateNode('name', e.target.value)} /></div>
                                     <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Purpose</label><textarea className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary min-h-[80px]" value={selectedNode.purpose} onChange={(e) => handleUpdateNode('purpose', e.target.value)} /></div>
 
-                                    {/* --- DYNAMIC STYLES DROPDOWNS --- */}
-                                    <div className="space-y-2 border-t pt-3 mt-3">
-                                        <span className="text-xs font-bold uppercase text-primary tracking-wider">Styles</span>
-                                        <div>
-                                            <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Text Color</label>
-                                            <select className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.styles?.color || ''} onChange={(e) => { const newStyles = { ...(selectedNode.styles || {}) }; if (e.target.value) newStyles.color = e.target.value; else delete newStyles.color; handleUpdateNode('styles', newStyles); }}>
-                                                <option value="">Inherit Default</option>
-                                                {Object.entries(graph.surface?.all_styles?.colors || {}).map(([k, v]: any) => <option key={k} value={k}>{v.name}</option>)}
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Background Color</label>
-                                            <select className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.styles?.background_color || ''} onChange={(e) => { const newStyles = { ...(selectedNode.styles || {}) }; if (e.target.value) newStyles.background_color = e.target.value; else delete newStyles.background_color; handleUpdateNode('styles', newStyles); }}>
-                                                <option value="">Inherit Default</option>
-                                                {Object.entries(graph.surface?.all_styles?.colors || {}).map(([k, v]: any) => <option key={k} value={k}>{v.name}</option>)}
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Typography</label>
-                                            <select className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.styles?.typography || ''} onChange={(e) => { const newStyles = { ...(selectedNode.styles || {}) }; if (e.target.value) newStyles.typography = e.target.value; else delete newStyles.typography; handleUpdateNode('styles', newStyles); }}>
-                                                <option value="">Inherit Default</option>
-                                                {Object.entries(graph.surface?.all_styles?.typography?.hierarchy || {}).map(([k, v]: any) => <option key={k} value={k}>{v.element} ({v.size})</option>)}
-                                            </select>
-                                        </div>
-                                    </div>
+                                    {/* --- COMPREHENSIVE & GENERALIZED STYLES UI --- */}
+                                    {(() => {
+                                        // Helper to handle flat keys
+                                        const updateStyle = (key: string, value: string | string[] | null) => {
+                                            const newStyles = { ...(selectedNode.styles || {}) };
+                                            if (value === null || value === '' || (Array.isArray(value) && value.length === 0)) {
+                                                delete newStyles[key];
+                                            } else {
+                                                newStyles[key] = value;
+                                            }
+
+                                            if (selectedNode.type === 'NewNode') setSelectedNode({ ...selectedNode, styles: newStyles });
+                                            else handleUpdateNode('styles', newStyles);
+                                        };
+
+                                        // Helper to handle nested keys (e.g., layout.mobile)
+                                        const updateNestedStyle = (category: string, key: string, value: string | any[] | null) => {
+                                            const newStyles = JSON.parse(JSON.stringify(selectedNode.styles || {}));
+                                            if (!newStyles[category]) newStyles[category] = {};
+
+                                            if (value === null || value === '' || (Array.isArray(value) && value.length === 0)) {
+                                                delete newStyles[category][key];
+                                                if (Object.keys(newStyles[category]).length === 0) delete newStyles[category];
+                                            } else {
+                                                newStyles[category][key] = value;
+                                            }
+
+                                            if (selectedNode.type === 'NewNode') setSelectedNode({ ...selectedNode, styles: newStyles });
+                                            else handleUpdateNode('styles', newStyles);
+                                        };
+
+                                        // Custom properties helper
+                                        const updateStyleKey = (oldKey: string, newKey: string, value: string) => {
+                                            if (oldKey === newKey) return;
+                                            const newStyles = { ...(selectedNode.styles || {}) };
+                                            delete newStyles[oldKey];
+                                            if (newKey.trim() !== '') newStyles[newKey] = value;
+
+                                            if (selectedNode.type === 'NewNode') setSelectedNode({ ...selectedNode, styles: newStyles });
+                                            else handleUpdateNode('styles', newStyles);
+                                        };
+
+                                        // Reserved keys that have dedicated UI
+                                        const reservedKeys = ['color', 'background_color', 'typography', 'layout', 'interactions', 'accessibility'];
+                                        const customStyles = Object.entries(selectedNode.styles || {}).filter(([k]) => !reservedKeys.includes(k));
+
+                                        return (
+                                            <div className="space-y-4 border-t pt-4 mt-4">
+                                                <span className="text-xs font-bold uppercase text-primary tracking-wider">Appearance & Styles</span>
+
+                                                {/* 1. Theme Connections */}
+                                                <div className="space-y-2 bg-slate-50 dark:bg-zinc-800/50 p-3 rounded-lg border border-border/50">
+                                                    <h4 className="text-[10px] font-bold text-muted-foreground uppercase mb-2">Theme Connections</h4>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">Text Color</label>
+                                                            <select className="w-full bg-white dark:bg-zinc-900 border rounded-md px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary" value={selectedNode.styles?.color || ''} onChange={(e) => updateStyle('color', e.target.value)}>
+                                                                <option value="">Inherit Default</option>
+                                                                {Object.entries(graph.surface?.all_styles?.colors || {}).map(([k, v]: any) => <option key={k} value={k}>{v.name}</option>)}
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">Background</label>
+                                                            <select className="w-full bg-white dark:bg-zinc-900 border rounded-md px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary" value={selectedNode.styles?.background_color || ''} onChange={(e) => updateStyle('background_color', e.target.value)}>
+                                                                <option value="">Inherit Default</option>
+                                                                {Object.entries(graph.surface?.all_styles?.colors || {}).map(([k, v]: any) => <option key={k} value={k}>{v.name}</option>)}
+                                                            </select>
+                                                        </div>
+                                                        <div className="col-span-2">
+                                                            <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">Typography</label>
+                                                            <select className="w-full bg-white dark:bg-zinc-900 border rounded-md px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary" value={selectedNode.styles?.typography || ''} onChange={(e) => updateStyle('typography', e.target.value)}>
+                                                                <option value="">Inherit Default</option>
+                                                                {Object.entries(graph.surface?.all_styles?.typography?.hierarchy || {}).map(([k, v]: any) => <option key={k} value={k}>{v.element}</option>)}
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* 2. Layout */}
+                                                <div className="space-y-2 bg-slate-50 dark:bg-zinc-800/50 p-3 rounded-lg border border-border/50">
+                                                    <h4 className="text-[10px] font-bold text-muted-foreground uppercase mb-2">Layout & Grids</h4>
+                                                    <div className="space-y-2">
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">Mobile (&lt; 768px)</label>
+                                                            <input className="w-full bg-white dark:bg-zinc-900 border rounded-md px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary" placeholder="Override mobile layout..." value={selectedNode.styles?.layout?.mobile || ''} onChange={(e) => updateNestedStyle('layout', 'mobile', e.target.value)} />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">Tablet (768px - 1024px)</label>
+                                                            <input className="w-full bg-white dark:bg-zinc-900 border rounded-md px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary" placeholder="Override tablet layout..." value={selectedNode.styles?.layout?.tablet || ''} onChange={(e) => updateNestedStyle('layout', 'tablet', e.target.value)} />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">Desktop (&gt; 1024px)</label>
+                                                            <input className="w-full bg-white dark:bg-zinc-900 border rounded-md px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary" placeholder="Override desktop layout..." value={selectedNode.styles?.layout?.desktop || ''} onChange={(e) => updateNestedStyle('layout', 'desktop', e.target.value)} />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">Grid System</label>
+                                                            <input className="w-full bg-white dark:bg-zinc-900 border rounded-md px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary" placeholder="e.g. 8px baseline grid" value={selectedNode.styles?.layout?.grid || ''} onChange={(e) => updateNestedStyle('layout', 'grid', e.target.value)} />
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* 3. Interactions */}
+                                                <div className="space-y-2 bg-slate-50 dark:bg-zinc-800/50 p-3 rounded-lg border border-border/50">
+                                                    <h4 className="text-[10px] font-bold text-muted-foreground uppercase mb-2 flex justify-between items-center">
+                                                        Interactions
+                                                        <span className="text-primary cursor-pointer hover:underline bg-primary/10 px-1.5 py-0.5 rounded normal-case" onClick={() => {
+                                                            const currentInteractions = selectedNode.styles?.interactions || [];
+                                                            updateStyle('interactions', [...currentInteractions, "New interaction"]);
+                                                        }}>+ Add</span>
+                                                    </h4>
+                                                    <div className="space-y-2">
+                                                        {(!selectedNode.styles?.interactions || selectedNode.styles?.interactions.length === 0) && (
+                                                            <div className="text-[10px] text-muted-foreground italic">Inherits from App Wide Styles.</div>
+                                                        )}
+                                                        {selectedNode.styles?.interactions?.map((rule: string, i: number) => (
+                                                            <div key={i} className="flex gap-1 mb-1 items-start">
+                                                                <input
+                                                                    className="flex-1 bg-white dark:bg-zinc-900 border rounded px-2 py-1 text-[10px] focus:ring-1 focus:ring-primary"
+                                                                    value={rule}
+                                                                    onChange={(e) => {
+                                                                        const newArr = [...selectedNode.styles.interactions];
+                                                                        newArr[i] = e.target.value;
+                                                                        updateStyle('interactions', newArr);
+                                                                    }}
+                                                                />
+                                                                <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500 hover:bg-red-100 flex-shrink-0" onClick={() => {
+                                                                    const newArr = [...selectedNode.styles.interactions];
+                                                                    newArr.splice(i, 1);
+                                                                    updateStyle('interactions', newArr);
+                                                                }}>
+                                                                    <Trash2 size={10} />
+                                                                </Button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                {/* 4. Accessibility */}
+                                                <div className="space-y-2 bg-slate-50 dark:bg-zinc-800/50 p-3 rounded-lg border border-border/50">
+                                                    <h4 className="text-[10px] font-bold text-muted-foreground uppercase mb-2">Accessibility</h4>
+                                                    <div className="space-y-2">
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">Visual Hierarchy</label>
+                                                            <input className="w-full bg-white dark:bg-zinc-900 border rounded-md px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary" placeholder="Override visual hierarchy rules..." value={selectedNode.styles?.accessibility?.visualHierarchy || ''} onChange={(e) => updateNestedStyle('accessibility', 'visualHierarchy', e.target.value)} />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-2 flex justify-between items-center">
+                                                                Keyboard Navigation
+                                                                <span className="text-primary cursor-pointer hover:underline bg-primary/10 px-1.5 py-0.5 rounded" onClick={() => {
+                                                                    const currentKeyboard = selectedNode.styles?.accessibility?.keyboard || [];
+                                                                    updateNestedStyle('accessibility', 'keyboard', [...currentKeyboard, "New keyboard rule"]);
+                                                                }}>+ Add</span>
+                                                            </label>
+                                                            {(!selectedNode.styles?.accessibility?.keyboard || selectedNode.styles?.accessibility?.keyboard.length === 0) && (
+                                                                <div className="text-[10px] text-muted-foreground italic mb-2">Inherits from App Wide Styles.</div>
+                                                            )}
+                                                            {selectedNode.styles?.accessibility?.keyboard?.map((rule: string, i: number) => (
+                                                                <div key={i} className="flex gap-1 mb-1 items-start">
+                                                                    <input
+                                                                        className="flex-1 bg-white dark:bg-zinc-900 border rounded px-2 py-1 text-[10px] focus:ring-1 focus:ring-primary"
+                                                                        value={rule}
+                                                                        onChange={(e) => {
+                                                                            const newKeyboard = [...selectedNode.styles.accessibility.keyboard];
+                                                                            newKeyboard[i] = e.target.value;
+                                                                            updateNestedStyle('accessibility', 'keyboard', newKeyboard);
+                                                                        }}
+                                                                    />
+                                                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500 hover:bg-red-100 flex-shrink-0" onClick={() => {
+                                                                        const newKeyboard = [...selectedNode.styles.accessibility.keyboard];
+                                                                        newKeyboard.splice(i, 1);
+                                                                        updateNestedStyle('accessibility', 'keyboard', newKeyboard);
+                                                                    }}>
+                                                                        <Trash2 size={10} />
+                                                                    </Button>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* 5. Custom Properties */}
+                                                <div className="space-y-2 bg-slate-50 dark:bg-zinc-800/50 p-3 rounded-lg border border-border/50">
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <h4 className="text-[10px] font-bold text-muted-foreground uppercase">Custom Properties</h4>
+                                                        <Button
+                                                            variant="ghost" size="sm" className="h-5 px-1.5 text-[9px] text-primary hover:bg-primary/10"
+                                                            onClick={() => {
+                                                                const baseKey = "new_property";
+                                                                let key = baseKey;
+                                                                let counter = 1;
+                                                                while (selectedNode.styles?.[key] !== undefined) { key = `${baseKey}_${counter}`; counter++; }
+                                                                updateStyle(key, "value");
+                                                            }}
+                                                        >
+                                                            <Plus size={10} className="mr-1" /> Add Rule
+                                                        </Button>
+                                                    </div>
+
+                                                    {customStyles.length === 0 ? (
+                                                        <div className="text-[10px] text-muted-foreground italic text-center py-2 border border-dashed rounded border-border/50">
+                                                            No custom styles applied.
+                                                        </div>
+                                                    ) : (
+                                                        <div className="space-y-2">
+                                                            {customStyles.map(([k, v], idx) => (
+                                                                <div key={idx} className="flex gap-2 items-center group">
+                                                                    <input
+                                                                        className="w-[40%] bg-white dark:bg-zinc-900 border rounded px-2 py-1 text-[10px] font-mono focus:ring-1 focus:ring-primary"
+                                                                        value={k} placeholder="e.g. padding"
+                                                                        onChange={(e) => updateStyleKey(k, e.target.value, typeof v === 'string' ? v : JSON.stringify(v))}
+                                                                    />
+                                                                    <span className="text-muted-foreground text-[10px]">:</span>
+                                                                    <input
+                                                                        className="flex-1 bg-white dark:bg-zinc-900 border rounded px-2 py-1 text-[10px] focus:ring-1 focus:ring-primary"
+                                                                        value={typeof v === 'string' ? v : JSON.stringify(v)} placeholder="e.g. 16px"
+                                                                        onChange={(e) => updateStyle(k, e.target.value)}
+                                                                    />
+                                                                    <Button
+                                                                        variant="ghost" size="icon" className="h-5 w-5 text-red-500 hover:bg-red-100 flex-shrink-0 opacity-50 group-hover:opacity-100 transition-opacity"
+                                                                        onClick={() => updateStyle(k, null)}
+                                                                    >
+                                                                        <Trash2 size={10} />
+                                                                    </Button>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
 
                                     {/* --- NAVIGATION RULES UI --- */}
                                     <div className="mt-6 border-t pt-4">
@@ -2199,31 +2850,237 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                     <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Name</label><input className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.name} onChange={(e) => setSelectedNode({ ...selectedNode, name: e.target.value })} autoFocus /></div>
                                     <div><label className="text-xs font-semibold text-muted-foreground mb-1 block">Purpose</label><textarea className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary min-h-[80px]" value={selectedNode.purpose} onChange={(e) => setSelectedNode({ ...selectedNode, purpose: e.target.value })} /></div>
 
-                                    {/* --- DYNAMIC STYLES DROPDOWNS --- */}
-                                    <div className="space-y-2 border-t pt-3 mt-3">
-                                        <span className="text-xs font-bold uppercase text-primary tracking-wider">Styles</span>
-                                        <div>
-                                            <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Text Color</label>
-                                            <select className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.styles?.color || ''} onChange={(e) => { const newStyles = { ...(selectedNode.styles || {}) }; if (e.target.value) newStyles.color = e.target.value; else delete newStyles.color; setSelectedNode({ ...selectedNode, styles: newStyles }); }}>
-                                                <option value="">Inherit Default</option>
-                                                {Object.entries(graph.surface?.all_styles?.colors || {}).map(([k, v]: any) => <option key={k} value={k}>{v.name}</option>)}
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Background Color</label>
-                                            <select className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.styles?.background_color || ''} onChange={(e) => { const newStyles = { ...(selectedNode.styles || {}) }; if (e.target.value) newStyles.background_color = e.target.value; else delete newStyles.background_color; setSelectedNode({ ...selectedNode, styles: newStyles }); }}>
-                                                <option value="">Inherit Default</option>
-                                                {Object.entries(graph.surface?.all_styles?.colors || {}).map(([k, v]: any) => <option key={k} value={k}>{v.name}</option>)}
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Typography</label>
-                                            <select className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.styles?.typography || ''} onChange={(e) => { const newStyles = { ...(selectedNode.styles || {}) }; if (e.target.value) newStyles.typography = e.target.value; else delete newStyles.typography; setSelectedNode({ ...selectedNode, styles: newStyles }); }}>
-                                                <option value="">Inherit Default</option>
-                                                {Object.entries(graph.surface?.all_styles?.typography?.hierarchy || {}).map(([k, v]: any) => <option key={k} value={k}>{v.element} ({v.size})</option>)}
-                                            </select>
-                                        </div>
-                                    </div>
+                                    {/* --- COMPREHENSIVE & GENERALIZED STYLES UI --- */}
+                                    {(() => {
+                                        // Helper to handle flat keys
+                                        const updateStyle = (key: string, value: string | string[] | null) => {
+                                            const newStyles = { ...(selectedNode.styles || {}) };
+                                            if (value === null || value === '' || (Array.isArray(value) && value.length === 0)) {
+                                                delete newStyles[key];
+                                            } else {
+                                                newStyles[key] = value;
+                                            }
+
+                                            if (selectedNode.type === 'NewNode') setSelectedNode({ ...selectedNode, styles: newStyles });
+                                            else handleUpdateNode('styles', newStyles);
+                                        };
+
+                                        // Helper to handle nested keys (e.g., layout.mobile)
+                                        const updateNestedStyle = (category: string, key: string, value: string | any[] | null) => {
+                                            const newStyles = JSON.parse(JSON.stringify(selectedNode.styles || {}));
+                                            if (!newStyles[category]) newStyles[category] = {};
+
+                                            if (value === null || value === '' || (Array.isArray(value) && value.length === 0)) {
+                                                delete newStyles[category][key];
+                                                if (Object.keys(newStyles[category]).length === 0) delete newStyles[category];
+                                            } else {
+                                                newStyles[category][key] = value;
+                                            }
+
+                                            if (selectedNode.type === 'NewNode') setSelectedNode({ ...selectedNode, styles: newStyles });
+                                            else handleUpdateNode('styles', newStyles);
+                                        };
+
+                                        // Custom properties helper
+                                        const updateStyleKey = (oldKey: string, newKey: string, value: string) => {
+                                            if (oldKey === newKey) return;
+                                            const newStyles = { ...(selectedNode.styles || {}) };
+                                            delete newStyles[oldKey];
+                                            if (newKey.trim() !== '') newStyles[newKey] = value;
+
+                                            if (selectedNode.type === 'NewNode') setSelectedNode({ ...selectedNode, styles: newStyles });
+                                            else handleUpdateNode('styles', newStyles);
+                                        };
+
+                                        // Reserved keys that have dedicated UI
+                                        const reservedKeys = ['color', 'background_color', 'typography', 'layout', 'interactions', 'accessibility'];
+                                        const customStyles = Object.entries(selectedNode.styles || {}).filter(([k]) => !reservedKeys.includes(k));
+
+                                        return (
+                                            <div className="space-y-4 border-t pt-4 mt-4">
+                                                <span className="text-xs font-bold uppercase text-primary tracking-wider">Appearance & Styles</span>
+
+                                                {/* 1. Theme Connections */}
+                                                <div className="space-y-2 bg-slate-50 dark:bg-zinc-800/50 p-3 rounded-lg border border-border/50">
+                                                    <h4 className="text-[10px] font-bold text-muted-foreground uppercase mb-2">Theme Connections</h4>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">Text Color</label>
+                                                            <select className="w-full bg-white dark:bg-zinc-900 border rounded-md px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary" value={selectedNode.styles?.color || ''} onChange={(e) => updateStyle('color', e.target.value)}>
+                                                                <option value="">Inherit Default</option>
+                                                                {Object.entries(graph.surface?.all_styles?.colors || {}).map(([k, v]: any) => <option key={k} value={k}>{v.name}</option>)}
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">Background</label>
+                                                            <select className="w-full bg-white dark:bg-zinc-900 border rounded-md px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary" value={selectedNode.styles?.background_color || ''} onChange={(e) => updateStyle('background_color', e.target.value)}>
+                                                                <option value="">Inherit Default</option>
+                                                                {Object.entries(graph.surface?.all_styles?.colors || {}).map(([k, v]: any) => <option key={k} value={k}>{v.name}</option>)}
+                                                            </select>
+                                                        </div>
+                                                        <div className="col-span-2">
+                                                            <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">Typography</label>
+                                                            <select className="w-full bg-white dark:bg-zinc-900 border rounded-md px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary" value={selectedNode.styles?.typography || ''} onChange={(e) => updateStyle('typography', e.target.value)}>
+                                                                <option value="">Inherit Default</option>
+                                                                {Object.entries(graph.surface?.all_styles?.typography?.hierarchy || {}).map(([k, v]: any) => <option key={k} value={k}>{v.element}</option>)}
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* 2. Layout */}
+                                                <div className="space-y-2 bg-slate-50 dark:bg-zinc-800/50 p-3 rounded-lg border border-border/50">
+                                                    <h4 className="text-[10px] font-bold text-muted-foreground uppercase mb-2">Layout & Grids</h4>
+                                                    <div className="space-y-2">
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">Mobile (&lt; 768px)</label>
+                                                            <input className="w-full bg-white dark:bg-zinc-900 border rounded-md px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary" placeholder="Override mobile layout..." value={selectedNode.styles?.layout?.mobile || ''} onChange={(e) => updateNestedStyle('layout', 'mobile', e.target.value)} />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">Tablet (768px - 1024px)</label>
+                                                            <input className="w-full bg-white dark:bg-zinc-900 border rounded-md px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary" placeholder="Override tablet layout..." value={selectedNode.styles?.layout?.tablet || ''} onChange={(e) => updateNestedStyle('layout', 'tablet', e.target.value)} />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">Desktop (&gt; 1024px)</label>
+                                                            <input className="w-full bg-white dark:bg-zinc-900 border rounded-md px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary" placeholder="Override desktop layout..." value={selectedNode.styles?.layout?.desktop || ''} onChange={(e) => updateNestedStyle('layout', 'desktop', e.target.value)} />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">Grid System</label>
+                                                            <input className="w-full bg-white dark:bg-zinc-900 border rounded-md px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary" placeholder="e.g. 8px baseline grid" value={selectedNode.styles?.layout?.grid || ''} onChange={(e) => updateNestedStyle('layout', 'grid', e.target.value)} />
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* 3. Interactions */}
+                                                <div className="space-y-2 bg-slate-50 dark:bg-zinc-800/50 p-3 rounded-lg border border-border/50">
+                                                    <h4 className="text-[10px] font-bold text-muted-foreground uppercase mb-2 flex justify-between items-center">
+                                                        Interactions
+                                                        <span className="text-primary cursor-pointer hover:underline bg-primary/10 px-1.5 py-0.5 rounded normal-case" onClick={() => {
+                                                            const currentInteractions = selectedNode.styles?.interactions || [];
+                                                            updateStyle('interactions', [...currentInteractions, "New interaction"]);
+                                                        }}>+ Add</span>
+                                                    </h4>
+                                                    <div className="space-y-2">
+                                                        {(!selectedNode.styles?.interactions || selectedNode.styles?.interactions.length === 0) && (
+                                                            <div className="text-[10px] text-muted-foreground italic">Inherits from App Wide Styles.</div>
+                                                        )}
+                                                        {selectedNode.styles?.interactions?.map((rule: string, i: number) => (
+                                                            <div key={i} className="flex gap-1 mb-1 items-start">
+                                                                <input
+                                                                    className="flex-1 bg-white dark:bg-zinc-900 border rounded px-2 py-1 text-[10px] focus:ring-1 focus:ring-primary"
+                                                                    value={rule}
+                                                                    onChange={(e) => {
+                                                                        const newArr = [...selectedNode.styles.interactions];
+                                                                        newArr[i] = e.target.value;
+                                                                        updateStyle('interactions', newArr);
+                                                                    }}
+                                                                />
+                                                                <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500 hover:bg-red-100 flex-shrink-0" onClick={() => {
+                                                                    const newArr = [...selectedNode.styles.interactions];
+                                                                    newArr.splice(i, 1);
+                                                                    updateStyle('interactions', newArr);
+                                                                }}>
+                                                                    <Trash2 size={10} />
+                                                                </Button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                {/* 4. Accessibility */}
+                                                <div className="space-y-2 bg-slate-50 dark:bg-zinc-800/50 p-3 rounded-lg border border-border/50">
+                                                    <h4 className="text-[10px] font-bold text-muted-foreground uppercase mb-2">Accessibility</h4>
+                                                    <div className="space-y-2">
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">Visual Hierarchy</label>
+                                                            <input className="w-full bg-white dark:bg-zinc-900 border rounded-md px-2 py-1.5 text-xs focus:ring-1 focus:ring-primary" placeholder="Override visual hierarchy rules..." value={selectedNode.styles?.accessibility?.visualHierarchy || ''} onChange={(e) => updateNestedStyle('accessibility', 'visualHierarchy', e.target.value)} />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-2 flex justify-between items-center">
+                                                                Keyboard Navigation
+                                                                <span className="text-primary cursor-pointer hover:underline bg-primary/10 px-1.5 py-0.5 rounded" onClick={() => {
+                                                                    const currentKeyboard = selectedNode.styles?.accessibility?.keyboard || [];
+                                                                    updateNestedStyle('accessibility', 'keyboard', [...currentKeyboard, "New keyboard rule"]);
+                                                                }}>+ Add</span>
+                                                            </label>
+                                                            {(!selectedNode.styles?.accessibility?.keyboard || selectedNode.styles?.accessibility?.keyboard.length === 0) && (
+                                                                <div className="text-[10px] text-muted-foreground italic mb-2">Inherits from App Wide Styles.</div>
+                                                            )}
+                                                            {selectedNode.styles?.accessibility?.keyboard?.map((rule: string, i: number) => (
+                                                                <div key={i} className="flex gap-1 mb-1 items-start">
+                                                                    <input
+                                                                        className="flex-1 bg-white dark:bg-zinc-900 border rounded px-2 py-1 text-[10px] focus:ring-1 focus:ring-primary"
+                                                                        value={rule}
+                                                                        onChange={(e) => {
+                                                                            const newKeyboard = [...selectedNode.styles.accessibility.keyboard];
+                                                                            newKeyboard[i] = e.target.value;
+                                                                            updateNestedStyle('accessibility', 'keyboard', newKeyboard);
+                                                                        }}
+                                                                    />
+                                                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500 hover:bg-red-100 flex-shrink-0" onClick={() => {
+                                                                        const newKeyboard = [...selectedNode.styles.accessibility.keyboard];
+                                                                        newKeyboard.splice(i, 1);
+                                                                        updateNestedStyle('accessibility', 'keyboard', newKeyboard);
+                                                                    }}>
+                                                                        <Trash2 size={10} />
+                                                                    </Button>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* 5. Custom Properties */}
+                                                <div className="space-y-2 bg-slate-50 dark:bg-zinc-800/50 p-3 rounded-lg border border-border/50">
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <h4 className="text-[10px] font-bold text-muted-foreground uppercase">Custom Properties</h4>
+                                                        <Button
+                                                            variant="ghost" size="sm" className="h-5 px-1.5 text-[9px] text-primary hover:bg-primary/10"
+                                                            onClick={() => {
+                                                                const baseKey = "new_property";
+                                                                let key = baseKey;
+                                                                let counter = 1;
+                                                                while (selectedNode.styles?.[key] !== undefined) { key = `${baseKey}_${counter}`; counter++; }
+                                                                updateStyle(key, "value");
+                                                            }}
+                                                        >
+                                                            <Plus size={10} className="mr-1" /> Add Rule
+                                                        </Button>
+                                                    </div>
+
+                                                    {customStyles.length === 0 ? (
+                                                        <div className="text-[10px] text-muted-foreground italic text-center py-2 border border-dashed rounded border-border/50">
+                                                            No custom styles applied.
+                                                        </div>
+                                                    ) : (
+                                                        <div className="space-y-2">
+                                                            {customStyles.map(([k, v], idx) => (
+                                                                <div key={idx} className="flex gap-2 items-center group">
+                                                                    <input
+                                                                        className="w-[40%] bg-white dark:bg-zinc-900 border rounded px-2 py-1 text-[10px] font-mono focus:ring-1 focus:ring-primary"
+                                                                        value={k} placeholder="e.g. padding"
+                                                                        onChange={(e) => updateStyleKey(k, e.target.value, typeof v === 'string' ? v : JSON.stringify(v))}
+                                                                    />
+                                                                    <span className="text-muted-foreground text-[10px]">:</span>
+                                                                    <input
+                                                                        className="flex-1 bg-white dark:bg-zinc-900 border rounded px-2 py-1 text-[10px] focus:ring-1 focus:ring-primary"
+                                                                        value={typeof v === 'string' ? v : JSON.stringify(v)} placeholder="e.g. 16px"
+                                                                        onChange={(e) => updateStyle(k, e.target.value)}
+                                                                    />
+                                                                    <Button
+                                                                        variant="ghost" size="icon" className="h-5 w-5 text-red-500 hover:bg-red-100 flex-shrink-0 opacity-50 group-hover:opacity-100 transition-opacity"
+                                                                        onClick={() => updateStyle(k, null)}
+                                                                    >
+                                                                        <Trash2 size={10} />
+                                                                    </Button>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
 
                                     <div className="pt-4 border-t flex justify-end gap-2 mt-6">
                                         <Button variant="outline" size="sm" onClick={() => setSelectedNode(null)}>Cancel</Button>
@@ -2481,6 +3338,149 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                 </div>
                             )}
                             {/* Editor fields for Functionalities */}
+                            {selectedNode.type === 'ColorStyleEdit' && (
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="text-xs font-bold text-muted-foreground uppercase block mb-2">Color Key (ID)</label>
+                                        <input className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.colorKey} onChange={(e) => setSelectedNode({ ...selectedNode, colorKey: e.target.value })} disabled={!selectedNode.isNew} placeholder="e.g. primary, success" />
+                                        {!selectedNode.isNew && <p className="text-[9px] text-muted-foreground mt-1">Key cannot be changed after creation.</p>}
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-muted-foreground uppercase block mb-2">Display Name</label>
+                                        <input className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.colorData.name} onChange={(e) => setSelectedNode({ ...selectedNode, colorData: { ...selectedNode.colorData, name: e.target.value } })} />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-muted-foreground uppercase block mb-2">Hex Code</label>
+                                        <div className="flex gap-2">
+                                            <input type="color" className="h-9 w-9 rounded border cursor-pointer p-0 shrink-0" value={selectedNode.colorData.color} onChange={(e) => setSelectedNode({ ...selectedNode, colorData: { ...selectedNode.colorData, color: e.target.value } })} />
+                                            <input className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm uppercase font-mono focus:ring-1 focus:ring-primary" value={selectedNode.colorData.color} onChange={(e) => setSelectedNode({ ...selectedNode, colorData: { ...selectedNode.colorData, color: e.target.value } })} />
+                                        </div>
+                                    </div>
+                                    <div className="pt-4 border-t flex justify-end gap-2 mt-6">
+                                        <Button variant="outline" size="sm" onClick={() => setSelectedNode(null)}>Cancel</Button>
+                                        <Button size="sm" onClick={() => {
+                                            if (!selectedNode.colorKey) return;
+                                            setGraph((prev: any) => {
+                                                const next = JSON.parse(JSON.stringify(prev));
+                                                if (!next.surface) next.surface = {};
+                                                if (!next.surface.all_styles) next.surface.all_styles = {};
+                                                if (!next.surface.all_styles.colors) next.surface.all_styles.colors = {};
+                                                next.surface.all_styles.colors[selectedNode.colorKey] = selectedNode.colorData;
+                                                return next;
+                                            });
+                                            setSelectedNode(null);
+                                        }}>Save Color</Button>
+                                    </div>
+                                    {!selectedNode.isNew && (
+                                        <Button variant="destructive" size="sm" className="w-full mt-2" onClick={() => {
+                                            setGraph((prev: any) => {
+                                                const next = JSON.parse(JSON.stringify(prev));
+                                                delete next.surface.all_styles.colors[selectedNode.colorKey];
+                                                return next;
+                                            });
+                                            setSelectedNode(null);
+                                        }}>Delete Color</Button>
+                                    )}
+                                </div>
+                            )}
+
+                            {selectedNode.type === 'TypographyStyleEdit' && (
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="text-xs font-bold text-muted-foreground uppercase block mb-2">Typo Key (ID)</label>
+                                        <input className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.typoKey} onChange={(e) => setSelectedNode({ ...selectedNode, typoKey: e.target.value })} disabled={!selectedNode.isNew} placeholder="e.g. h1, body" />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-muted-foreground uppercase block mb-2">Element / Name</label>
+                                        <input className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.typoData.element} onChange={(e) => setSelectedNode({ ...selectedNode, typoData: { ...selectedNode.typoData, element: e.target.value } })} />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label className="text-xs font-bold text-muted-foreground uppercase block mb-2">Size</label>
+                                            <input className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.typoData.size} onChange={(e) => setSelectedNode({ ...selectedNode, typoData: { ...selectedNode.typoData, size: e.target.value } })} placeholder="e.g. 16px" />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-muted-foreground uppercase block mb-2">Weight</label>
+                                            <input className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.typoData.weight} onChange={(e) => setSelectedNode({ ...selectedNode, typoData: { ...selectedNode.typoData, weight: e.target.value } })} placeholder="e.g. Bold" />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-muted-foreground uppercase block mb-2">Usage Context</label>
+                                        <textarea className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.typoData.usage} onChange={(e) => setSelectedNode({ ...selectedNode, typoData: { ...selectedNode.typoData, usage: e.target.value } })} />
+                                    </div>
+                                    <div className="pt-4 border-t flex justify-end gap-2 mt-6">
+                                        <Button variant="outline" size="sm" onClick={() => setSelectedNode(null)}>Cancel</Button>
+                                        <Button size="sm" onClick={() => {
+                                            if (!selectedNode.typoKey) return;
+                                            setGraph((prev: any) => {
+                                                const next = JSON.parse(JSON.stringify(prev));
+                                                if (!next.surface) next.surface = {};
+                                                if (!next.surface.all_styles) next.surface.all_styles = {};
+                                                if (!next.surface.all_styles.typography) next.surface.all_styles.typography = { hierarchy: {} };
+                                                if (!next.surface.all_styles.typography.hierarchy) next.surface.all_styles.typography.hierarchy = {};
+                                                next.surface.all_styles.typography.hierarchy[selectedNode.typoKey] = selectedNode.typoData;
+                                                return next;
+                                            });
+                                            setSelectedNode(null);
+                                        }}>Save Typography</Button>
+                                    </div>
+                                    {!selectedNode.isNew && (
+                                        <Button variant="destructive" size="sm" className="w-full mt-2" onClick={() => {
+                                            setGraph((prev: any) => {
+                                                const next = JSON.parse(JSON.stringify(prev));
+                                                delete next.surface.all_styles.typography.hierarchy[selectedNode.typoKey];
+                                                return next;
+                                            });
+                                            setSelectedNode(null);
+                                        }}>Delete Typography</Button>
+                                    )}
+                                </div>
+                            )}
+
+                            {selectedNode.type === 'GlobalStyleEdit' && (
+                                <div className="space-y-4">
+                                    <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 p-3 rounded text-xs leading-relaxed border border-blue-200 dark:border-blue-800/50 mb-4">
+                                        These are the default styles applied App-Wide. If a Screen or Component does not have custom styles, it will inherit these.
+                                    </div>
+
+                                    <div>
+                                        <label className="text-xs font-bold text-muted-foreground uppercase block mb-2">Default Primary Color</label>
+                                        <select className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.data?.color || ''} onChange={(e) => setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, color: e.target.value } })}>
+                                            <option value="">Select...</option>
+                                            {Object.entries(graph.surface?.all_styles?.colors || {}).map(([k, v]: any) => <option key={k} value={k}>{v.name} ({k})</option>)}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-xs font-bold text-muted-foreground uppercase block mb-2">Default Background</label>
+                                        <select className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.data?.background_color || ''} onChange={(e) => setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, background_color: e.target.value } })}>
+                                            <option value="">Select...</option>
+                                            {Object.entries(graph.surface?.all_styles?.colors || {}).map(([k, v]: any) => <option key={k} value={k}>{v.name} ({k})</option>)}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-xs font-bold text-muted-foreground uppercase block mb-2">Default Typography</label>
+                                        <select className="w-full bg-slate-50 dark:bg-zinc-800 border rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-primary" value={selectedNode.data?.typography || ''} onChange={(e) => setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, typography: e.target.value } })}>
+                                            <option value="">Select...</option>
+                                            {Object.entries(graph.surface?.all_styles?.typography?.hierarchy || {}).map(([k, v]: any) => <option key={k} value={k}>{v.element} ({k})</option>)}
+                                        </select>
+                                    </div>
+
+                                    <div className="pt-4 border-t flex justify-end gap-2 mt-6">
+                                        <Button variant="outline" size="sm" onClick={() => setSelectedNode(null)}>Cancel</Button>
+                                        <Button size="sm" onClick={() => {
+                                            setGraph((prev: any) => {
+                                                const next = JSON.parse(JSON.stringify(prev));
+                                                if (!next.surface) next.surface = {};
+                                                next.surface.global_styles = selectedNode.data;
+                                                return next;
+                                            });
+                                            setSelectedNode(null);
+                                        }}>Save Defaults</Button>
+                                    </div>
+                                </div>
+                            )}
                             {selectedNode.type === 'FunctionalityForm' && (
                                 <>
                                     <div>
