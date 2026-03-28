@@ -8,7 +8,7 @@ import React, { useState, useRef, useEffect, useMemo } from "react";
 import Editor, { OnMount } from "@monaco-editor/react";
 import { useLoadAppFile } from "@/hooks/useLoadAppFile";
 import { useTheme } from "@/contexts/ThemeContext";
-import { Circle, Save, RefreshCw, Layout, Code, MousePointerClick, ArrowRight, ArrowLeft, ArrowDown, ZoomInIcon, ZoomOutIcon, Briefcase, Edit2, Trash2, ChevronRight, ChevronDown, Plus, Globe, GripVertical } from "lucide-react";
+import { Circle, Save, RefreshCw, Layout, Code, MousePointerClick, ArrowRight, ArrowLeft, ArrowDown, ZoomInIcon, ZoomOutIcon, Briefcase, Edit2, Trash2, ChevronRight, ChevronDown, Plus, Globe, GripVertical, ListTodo, AlertCircle, XCircle, AlertTriangle, Lightbulb } from "lucide-react";
 import "@/components/chat/monaco";
 import { IpcClient } from "@/ipc/ipc_client";
 import { showError, showSuccess, showWarning } from "@/lib/toast";
@@ -372,6 +372,9 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
 
     const [expandedNavSections, setExpandedNavSections] = useState<Set<string>>(new Set(['global'])); // Default local open
     const [expandedStyleSections, setExpandedStyleSections] = useState<Set<string>>(new Set([]));
+
+    const [isAppWideNavExpanded, setIsAppWideNavExpanded] = useState<boolean>(true);
+    const [isAllStylesExpanded, setIsAllStylesExpanded] = useState<boolean>(true);
 
     const toggleStyleSection = (id: string) => {
         setExpandedStyleSections(prev => {
@@ -2054,171 +2057,183 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
                                     <div className="flex flex-col items-center w-full gap-4 max-w-4xl mx-auto">
                                         {(!showFunctionality || !activeFunction) && showNav && (
                                             <div className="w-full bg-white dark:bg-zinc-900 border border-border rounded-xl shadow-sm mb-8 overflow-hidden">
-                                                <div className="bg-slate-50 dark:bg-zinc-800/50 px-4 py-3 border-b flex items-center justify-between">
+                                                <div
+                                                    className="bg-slate-50 dark:bg-zinc-800/50 px-4 py-3 border-b flex items-center justify-between cursor-pointer hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+                                                    onClick={() => setIsAppWideNavExpanded(!isAppWideNavExpanded)}
+                                                >
                                                     <div className="flex items-center gap-2">
+                                                        {isAppWideNavExpanded ? <ChevronDown size={14} className="text-muted-foreground flex-shrink-0" /> : <ChevronRight size={14} className="text-muted-foreground flex-shrink-0" />}
                                                         <Globe size={16} className="text-primary" />
                                                         <h3 className="text-xs font-bold uppercase tracking-widest">App Wide Navigation</h3>
                                                     </div>
                                                     <span className="text-[10px] text-muted-foreground italic font-medium">Click rules to edit</span>
                                                 </div>
 
-                                                <div className="divide-y divide-border/40">
-                                                    {NAV_TYPES.map((navType) => {
-                                                        // 1. Get all rules, then filter non-globals to ONLY show 'app-wide'
-                                                        const allTypeRules = graph.structure?.edges?.navigationRules?.[navType.id as NavRuleType] || [];
-                                                        const displayRules = navType.id === 'global'
-                                                            ? allTypeRules
-                                                            : allTypeRules.filter((r: any) => r.where === 'app-wide');
+                                                {isAppWideNavExpanded && (
+                                                    <div className="divide-y divide-border/40">
+                                                        {NAV_TYPES.map((navType) => {
+                                                            // 1. Get all rules, then filter non-globals to ONLY show 'app-wide'
+                                                            const allTypeRules = graph.structure?.edges?.navigationRules?.[navType.id as NavRuleType] || [];
+                                                            const displayRules = navType.id === 'global'
+                                                                ? allTypeRules
+                                                                : allTypeRules.filter((r: any) => r.where === 'app-wide');
 
-                                                        const isExpanded = expandedNavSections.has(navType.id);
+                                                            const isExpanded = expandedNavSections.has(navType.id);
 
-                                                        return (
-                                                            <div key={navType.id} className="group/section">
-                                                                {/* Header with rearranged badge and new Add button */}
-                                                                <div className="w-full px-4 py-2 flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors cursor-pointer" onClick={() => toggleNavSection(navType.id)}>
-                                                                    {isExpanded ? <ChevronDown size={14} className="flex-shrink-0" /> : <ChevronRight size={14} className="flex-shrink-0" />}
-                                                                    <span className="text-xs font-semibold flex-shrink-0">{navType.label}</span>
-                                                                    <span className="bg-muted text-[10px] px-1.5 py-0.5 rounded-full opacity-60 flex-shrink-0">{displayRules.length}</span>
+                                                            return (
+                                                                <div key={navType.id} className="group/section">
+                                                                    {/* Header with rearranged badge and new Add button */}
+                                                                    <div className="w-full px-4 py-2 flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors cursor-pointer" onClick={() => toggleNavSection(navType.id)}>
+                                                                        {isExpanded ? <ChevronDown size={14} className="flex-shrink-0" /> : <ChevronRight size={14} className="flex-shrink-0" />}
+                                                                        <span className="text-xs font-semibold flex-shrink-0">{navType.label}</span>
+                                                                        <span className="bg-muted text-[10px] px-1.5 py-0.5 rounded-full opacity-60 flex-shrink-0">{displayRules.length}</span>
 
-                                                                    <Button
-                                                                        variant="ghost"
-                                                                        size="sm"
-                                                                        className="ml-auto h-6 px-2 text-[10px] text-muted-foreground hover:text-primary hover:bg-primary/10 flex-shrink-0 font-medium"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation(); // Don't trigger the accordion toggle
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="sm"
+                                                                            className="ml-auto h-6 px-2 text-[10px] text-muted-foreground hover:text-primary hover:bg-primary/10 flex-shrink-0 font-medium"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation(); // Don't trigger the accordion toggle
 
-                                                                            const newIndex = allTypeRules.length; // Append to original array
-                                                                            const newRule = navType.id === 'global'
-                                                                                ? { name: `New ${navType.label}`, purpose: '', layouts: { mobile: 'Bottom Tab Bar', tablet: 'Sidebar', desktop: 'Top Nav' }, order_of_screens: [], display_in: [] }
-                                                                                : { where: 'app-wide', description: `New ${navType.label} Rule`, target: '' };
+                                                                                const newIndex = allTypeRules.length; // Append to original array
+                                                                                const newRule = navType.id === 'global'
+                                                                                    ? { name: `New ${navType.label}`, purpose: '', layouts: { mobile: 'Bottom Tab Bar', tablet: 'Sidebar', desktop: 'Top Nav' }, order_of_screens: [], display_in: [] }
+                                                                                    : { where: 'app-wide', description: `New ${navType.label} Rule`, target: '' };
 
-                                                                            setGraph((prev: any) => {
-                                                                                const next = JSON.parse(JSON.stringify(prev));
-                                                                                if (!next.structure.edges.navigationRules[navType.id]) {
-                                                                                    next.structure.edges.navigationRules[navType.id] = [];
-                                                                                }
-                                                                                next.structure.edges.navigationRules[navType.id].push(newRule);
-                                                                                return next;
-                                                                            });
+                                                                                setGraph((prev: any) => {
+                                                                                    const next = JSON.parse(JSON.stringify(prev));
+                                                                                    if (!next.structure.edges.navigationRules[navType.id]) {
+                                                                                        next.structure.edges.navigationRules[navType.id] = [];
+                                                                                    }
+                                                                                    next.structure.edges.navigationRules[navType.id].push(newRule);
+                                                                                    return next;
+                                                                                });
 
-                                                                            // Ensure section is open and open the editor
-                                                                            setExpandedNavSections(prev => new Set(prev).add(navType.id));
-                                                                            setSelectedNode({ type: 'NavRuleEdit', ruleType: navType.id, index: newIndex, rule: newRule });
-                                                                        }}
-                                                                    >
-                                                                        <Plus size={10} className="mr-1" />
-                                                                        Add New
-                                                                    </Button>
-                                                                </div>
+                                                                                // Ensure section is open and open the editor
+                                                                                setExpandedNavSections(prev => new Set(prev).add(navType.id));
+                                                                                setSelectedNode({ type: 'NavRuleEdit', ruleType: navType.id, index: newIndex, rule: newRule });
+                                                                            }}
+                                                                        >
+                                                                            <Plus size={10} className="mr-1" />
+                                                                            Add New
+                                                                        </Button>
+                                                                    </div>
 
-                                                                {isExpanded && (
-                                                                    <div className="px-4 pb-3 space-y-1 animate-in slide-in-from-top-1 duration-200">
-                                                                        <p className="text-[10px] text-muted-foreground italic mb-2 px-1">{navType.desc}</p>
+                                                                    {isExpanded && (
+                                                                        <div className="px-4 pb-3 space-y-1 animate-in slide-in-from-top-1 duration-200">
+                                                                            <p className="text-[10px] text-muted-foreground italic mb-2 px-1">{navType.desc}</p>
 
-                                                                        {displayRules.length === 0 && (
-                                                                            <div className="text-[10px] text-muted-foreground italic p-2 text-center border border-dashed rounded-md bg-slate-50/50 dark:bg-zinc-800/50">
-                                                                                No app-wide rules for {navType.label} Navigation
-                                                                            </div>
-                                                                        )}
+                                                                            {displayRules.length === 0 && (
+                                                                                <div className="text-[10px] text-muted-foreground italic p-2 text-center border border-dashed rounded-md bg-slate-50/50 dark:bg-zinc-800/50">
+                                                                                    No app-wide rules for {navType.label} Navigation
+                                                                                </div>
+                                                                            )}
 
-                                                                        {displayRules.map((rule: any, idx: number) => {
-                                                                            // Find the real index in the unfiltered array so the sidebar editor updates the correct rule
-                                                                            const realIndex = allTypeRules.findIndex((r: any) => r === rule);
+                                                                            {displayRules.map((rule: any, idx: number) => {
+                                                                                // Find the real index in the unfiltered array so the sidebar editor updates the correct rule
+                                                                                const realIndex = allTypeRules.findIndex((r: any) => r === rule);
 
-                                                                            return (
-                                                                                <div
-                                                                                    key={`${navType.id}-${idx}`}
-                                                                                    onClick={() => setSelectedNode({ type: 'NavRuleEdit', rule, ruleType: navType.id, index: realIndex })}
-                                                                                    className="flex items-center gap-3 p-2 rounded-md border border-transparent hover:border-primary/20 hover:bg-primary/5 cursor-pointer group/rule active:scale-[0.99] transition-all"
-                                                                                >
-                                                                                    <div className="flex-1 min-w-0">
-                                                                                        <div className="text-[11px] font-medium truncate">{rule.name || rule.description || 'New Navigation Rule'}</div>
-                                                                                        <div className="flex gap-2 mt-0.5 flex-wrap">
-                                                                                            {navType.id === 'global' ? (
-                                                                                                <span className="text-[9px] text-muted-foreground">• {rule.layouts?.desktop || 'No layout'} (Desktop)</span>
-                                                                                            ) : (
-                                                                                                <>
-                                                                                                    {rule.target && <span className="text-[9px] text-blue-500 font-bold">→ {getNodeById(rule.target)?.name || 'External'}</span>}
-                                                                                                    <span className="text-[9px] text-muted-foreground">• Shown in: App-Wide</span>
-                                                                                                </>
-                                                                                            )}
+                                                                                return (
+                                                                                    <div
+                                                                                        key={`${navType.id}-${idx}`}
+                                                                                        onClick={() => setSelectedNode({ type: 'NavRuleEdit', rule, ruleType: navType.id, index: realIndex })}
+                                                                                        className="flex items-center gap-3 p-2 rounded-md border border-transparent hover:border-primary/20 hover:bg-primary/5 cursor-pointer group/rule active:scale-[0.99] transition-all"
+                                                                                    >
+                                                                                        <div className="flex-1 min-w-0">
+                                                                                            <div className="text-[11px] font-medium truncate">{rule.name || rule.description || 'New Navigation Rule'}</div>
+                                                                                            <div className="flex gap-2 mt-0.5 flex-wrap">
+                                                                                                {navType.id === 'global' ? (
+                                                                                                    <span className="text-[9px] text-muted-foreground">• {rule.layouts?.desktop || 'No layout'} (Desktop)</span>
+                                                                                                ) : (
+                                                                                                    <>
+                                                                                                        {rule.target && <span className="text-[9px] text-blue-500 font-bold">→ {getNodeById(rule.target)?.name || 'External'}</span>}
+                                                                                                        <span className="text-[9px] text-muted-foreground">• Shown in: App-Wide</span>
+                                                                                                    </>
+                                                                                                )}
+                                                                                            </div>
                                                                                         </div>
                                                                                     </div>
-                                                                                </div>
-                                                                            );
-                                                                        })}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
 
                                         {/* --- ALL STYLES (LIBRARY) --- */}
                                         {(!showFunctionality || !activeFunction) && showStyles && (
                                             <div className="w-full bg-white dark:bg-zinc-900 border border-border rounded-xl shadow-sm mb-4 overflow-hidden">
-                                                <div className="bg-slate-50 dark:bg-zinc-800/50 px-4 py-3 border-b flex items-center justify-between">
+                                                <div
+                                                    className="bg-slate-50 dark:bg-zinc-800/50 px-4 py-3 border-b flex items-center justify-between cursor-pointer hover:bg-slate-100 dark:hover:bg-zinc-800 transition-colors"
+                                                    onClick={() => setIsAllStylesExpanded(!isAllStylesExpanded)}
+                                                >
                                                     <div className="flex items-center gap-2">
+                                                        {isAllStylesExpanded ? <ChevronDown size={14} className="text-muted-foreground flex-shrink-0" /> : <ChevronRight size={14} className="text-muted-foreground flex-shrink-0" />}
                                                         <span className="text-amber-500">🎨</span>
                                                         <h3 className="text-xs font-bold uppercase tracking-widest">All Styles</h3>
                                                     </div>
                                                     <span className="text-[10px] text-muted-foreground italic font-medium">Style Library</span>
                                                 </div>
 
-                                                <div className="divide-y divide-border/40">
-                                                    {/* Colors */}
-                                                    <div className="group/section">
-                                                        <div className="w-full px-4 py-2 flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors cursor-pointer" onClick={() => toggleStyleSection('colors')}>
-                                                            {expandedStyleSections.has('colors') ? <ChevronDown size={14} className="flex-shrink-0" /> : <ChevronRight size={14} className="flex-shrink-0" />}
-                                                            <span className="text-xs font-semibold flex-shrink-0">Colors</span>
-                                                            <span className="bg-muted text-[10px] px-1.5 py-0.5 rounded-full opacity-60 ml-auto">{Object.keys(graph.surface?.all_styles?.colors || {}).length}</span>
-                                                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary hover:bg-primary/10 flex-shrink-0" onClick={(e) => { e.stopPropagation(); setExpandedStyleSections(prev => new Set(prev).add('colors')); setSelectedNode({ type: 'ColorStyleEdit', isNew: true, colorKey: '', colorData: { name: 'New Color', color: '#000000' } }); }}>
-                                                                <Plus size={12} />
-                                                            </Button>
-                                                        </div>
-                                                        {expandedStyleSections.has('colors') && (
-                                                            <div className="px-4 pb-3 space-y-1 animate-in slide-in-from-top-1">
-                                                                {Object.entries(graph.surface?.all_styles?.colors || {}).map(([k, v]: any) => (
-                                                                    <div key={k} onClick={() => setSelectedNode({ type: 'ColorStyleEdit', isNew: false, colorKey: k, colorData: v })} className="flex items-center gap-3 p-2 rounded-md hover:bg-primary/5 cursor-pointer border border-transparent hover:border-primary/20 transition-all">
-                                                                        <div className="w-4 h-4 rounded-full border shadow-sm" style={{ backgroundColor: v.color }}></div>
-                                                                        <div className="text-[11px] font-bold">{v.name} <span className="text-[9px] font-normal text-muted-foreground ml-1">({k})</span></div>
-                                                                        <div className="text-[10px] font-mono text-muted-foreground ml-auto">{v.color}</div>
-                                                                    </div>
-                                                                ))}
+                                                {isAllStylesExpanded && (
+                                                    <div className="divide-y divide-border/40">
+                                                        {/* Colors */}
+                                                        <div className="group/section">
+                                                            <div className="w-full px-4 py-2 flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors cursor-pointer" onClick={() => toggleStyleSection('colors')}>
+                                                                {expandedStyleSections.has('colors') ? <ChevronDown size={14} className="flex-shrink-0" /> : <ChevronRight size={14} className="flex-shrink-0" />}
+                                                                <span className="text-xs font-semibold flex-shrink-0">Colors</span>
+                                                                <span className="bg-muted text-[10px] px-1.5 py-0.5 rounded-full opacity-60 ml-auto">{Object.keys(graph.surface?.all_styles?.colors || {}).length}</span>
+                                                                <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary hover:bg-primary/10 flex-shrink-0" onClick={(e) => { e.stopPropagation(); setExpandedStyleSections(prev => new Set(prev).add('colors')); setSelectedNode({ type: 'ColorStyleEdit', isNew: true, colorKey: '', colorData: { name: 'New Color', color: '#000000' } }); }}>
+                                                                    <Plus size={12} />
+                                                                </Button>
                                                             </div>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Typography */}
-                                                    <div className="group/section">
-                                                        <div className="w-full px-4 py-2 flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors cursor-pointer" onClick={() => toggleStyleSection('typography')}>
-                                                            {expandedStyleSections.has('typography') ? <ChevronDown size={14} className="flex-shrink-0" /> : <ChevronRight size={14} className="flex-shrink-0" />}
-                                                            <span className="text-xs font-semibold flex-shrink-0">Typography</span>
-                                                            <span className="bg-muted text-[10px] px-1.5 py-0.5 rounded-full opacity-60 ml-auto">{Object.keys(graph.surface?.all_styles?.typography?.hierarchy || {}).length}</span>
-                                                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary hover:bg-primary/10 flex-shrink-0" onClick={(e) => { e.stopPropagation(); setExpandedStyleSections(prev => new Set(prev).add('typography')); setSelectedNode({ type: 'TypographyStyleEdit', isNew: true, typoKey: '', typoData: { element: 'New Element', size: '16px', weight: 'Regular', lineHeight: '1.5', usage: '' } }); }}>
-                                                                <Plus size={12} />
-                                                            </Button>
-                                                        </div>
-                                                        {expandedStyleSections.has('typography') && (
-                                                            <div className="px-4 pb-3 space-y-1 animate-in slide-in-from-top-1">
-                                                                <div className="text-[10px] text-muted-foreground mb-2 px-1 flex justify-between">
-                                                                    <span>Family: <strong>{graph.surface?.all_styles?.typography?.family || 'Inter'}</strong></span>
-                                                                </div>
-                                                                {Object.entries(graph.surface?.all_styles?.typography?.hierarchy || {}).map(([k, v]: any) => (
-                                                                    <div key={k} onClick={() => setSelectedNode({ type: 'TypographyStyleEdit', isNew: false, typoKey: k, typoData: v })} className="flex flex-col gap-1 p-2 rounded-md hover:bg-primary/5 cursor-pointer border border-transparent hover:border-primary/20 transition-all">
-                                                                        <div className="flex justify-between items-center">
-                                                                            <div className="text-[11px] font-bold">{v.element} <span className="text-[9px] font-normal text-muted-foreground">({k})</span></div>
-                                                                            <div className="text-[9px] bg-muted/50 px-1.5 py-0.5 rounded font-mono">{v.size} / {v.weight}</div>
+                                                            {expandedStyleSections.has('colors') && (
+                                                                <div className="px-4 pb-3 space-y-1 animate-in slide-in-from-top-1">
+                                                                    {Object.entries(graph.surface?.all_styles?.colors || {}).map(([k, v]: any) => (
+                                                                        <div key={k} onClick={() => setSelectedNode({ type: 'ColorStyleEdit', isNew: false, colorKey: k, colorData: v })} className="flex items-center gap-3 p-2 rounded-md hover:bg-primary/5 cursor-pointer border border-transparent hover:border-primary/20 transition-all">
+                                                                            <div className="w-4 h-4 rounded-full border shadow-sm" style={{ backgroundColor: v.color }}></div>
+                                                                            <div className="text-[11px] font-bold">{v.name} <span className="text-[9px] font-normal text-muted-foreground ml-1">({k})</span></div>
+                                                                            <div className="text-[10px] font-mono text-muted-foreground ml-auto">{v.color}</div>
                                                                         </div>
-                                                                        <div className="text-[10px] text-muted-foreground truncate">{v.usage}</div>
-                                                                    </div>
-                                                                ))}
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Typography */}
+                                                        <div className="group/section">
+                                                            <div className="w-full px-4 py-2 flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors cursor-pointer" onClick={() => toggleStyleSection('typography')}>
+                                                                {expandedStyleSections.has('typography') ? <ChevronDown size={14} className="flex-shrink-0" /> : <ChevronRight size={14} className="flex-shrink-0" />}
+                                                                <span className="text-xs font-semibold flex-shrink-0">Typography</span>
+                                                                <span className="bg-muted text-[10px] px-1.5 py-0.5 rounded-full opacity-60 ml-auto">{Object.keys(graph.surface?.all_styles?.typography?.hierarchy || {}).length}</span>
+                                                                <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary hover:bg-primary/10 flex-shrink-0" onClick={(e) => { e.stopPropagation(); setExpandedStyleSections(prev => new Set(prev).add('typography')); setSelectedNode({ type: 'TypographyStyleEdit', isNew: true, typoKey: '', typoData: { element: 'New Element', size: '16px', weight: 'Regular', lineHeight: '1.5', usage: '' } }); }}>
+                                                                    <Plus size={12} />
+                                                                </Button>
                                                             </div>
-                                                        )}
+                                                            {expandedStyleSections.has('typography') && (
+                                                                <div className="px-4 pb-3 space-y-1 animate-in slide-in-from-top-1">
+                                                                    <div className="text-[10px] text-muted-foreground mb-2 px-1 flex justify-between">
+                                                                        <span>Family: <strong>{graph.surface?.all_styles?.typography?.family || 'Inter'}</strong></span>
+                                                                    </div>
+                                                                    {Object.entries(graph.surface?.all_styles?.typography?.hierarchy || {}).map(([k, v]: any) => (
+                                                                        <div key={k} onClick={() => setSelectedNode({ type: 'TypographyStyleEdit', isNew: false, typoKey: k, typoData: v })} className="flex flex-col gap-1 p-2 rounded-md hover:bg-primary/5 cursor-pointer border border-transparent hover:border-primary/20 transition-all">
+                                                                            <div className="flex justify-between items-center">
+                                                                                <div className="text-[11px] font-bold">{v.element} <span className="text-[9px] font-normal text-muted-foreground">({k})</span></div>
+                                                                                <div className="text-[9px] bg-muted/50 px-1.5 py-0.5 rounded font-mono">{v.size} / {v.weight}</div>
+                                                                            </div>
+                                                                            <div className="text-[10px] text-muted-foreground truncate">{v.usage}</div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                </div>
+                                                )}
                                             </div>
                                         )}
 
@@ -3648,12 +3663,66 @@ export const DesignSemanticsTab = ({ loading, app }: DesignViewProps) => {
     const [viewMode, setViewMode] = useState<'canvas' | 'code'>('canvas');
     const { refreshApp } = useLoadApp(app?.id ?? null);
 
+    // --- ADD THIS BLOCK ---
+    const [isTasklistStale, setIsTasklistStale] = useState<boolean>(true);
+
+    // Convert issues to state so we can populate it on click
+    const [issues, setIssues] = useState<any[]>([]);
+    const [hasUncheckedChanges, setHasUncheckedChanges] = useState<boolean>(false);
+
+    // --- NEW: State for the dropdown panel ---
+    const [isIssuesPanelOpen, setIsIssuesPanelOpen] = useState<boolean>(false);
+
+    // --- UPGRADED: Semantic Issue Structure ---
+    const dummyIssuesPayload = [
+        {
+            id: 1,
+            severity: "error",
+            element: "Global Navigation",
+            title: "Missing Mobile Layout Constraint",
+            impact: "Without a defined mobile layout, the AI might hallucinate a dense desktop navbar on smaller screens, causing overlapping text and broken tap targets.",
+            suggestion: "Add a 'Bottom Tab Bar' or 'Hamburger Menu' to the mobile layout property."
+        },
+        {
+            id: 2,
+            severity: "warning",
+            element: "Checkout Flow",
+            title: "Empty User Flow",
+            impact: "This flow is declared but has 0 steps. If the AI tries to build this feature, it will lack the structural sequence needed to connect the right components.",
+            suggestion: "Click '+ Add Screen' in the Flow Sequence to map out the user journey."
+        },
+        {
+            id: 3,
+            severity: "info",
+            element: "New Persona",
+            title: "Incomplete Demographics",
+            impact: "Missing age and tech expertise metrics. The AI won't know whether to optimize for power users (dense UI) or casual users (large text, simple UI).",
+            suggestion: "Fill out the Demographics and Technical Profile for this persona."
+        }
+    ];
+
     const DESIGN_FILE = "DESIGN_SEMANTIC.md";
 
     const designFilePath = app?.files?.find(
         (file) => file === DESIGN_FILE
     );
     const { content } = useLoadAppFile(app?.id ?? null, designFilePath || "");
+
+    // Automatically mark the tasklist as stale and flag unchecked changes if the file updates
+    useEffect(() => {
+        if (content) {
+            setIsTasklistStale(true);
+            setHasUncheckedChanges(true);
+            setIssues([]);
+            setIsIssuesPanelOpen(false); // Close panel on new edits
+        }
+    }, [content]);
+
+    const handleCheckIssues = () => {
+        setIssues(dummyIssuesPayload);
+        setHasUncheckedChanges(false);
+        setIsIssuesPanelOpen(true); // Auto-open the panel to show what went wrong
+    };
 
     const { handleDesignSemanticInfer, handleDesignSemanticBuild } = useDesignSemanticInNewChat()
 
@@ -3775,32 +3844,138 @@ export const DesignSemanticsTab = ({ loading, app }: DesignViewProps) => {
     return (
         <div className="flex flex-col h-full bg-white">
             <div className="flex items-center justify-between p-2 border-b">
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-3">
+                    {/* 1. Refresh Button */}
                     <button
                         onClick={() => refreshApp()}
-                        className="p-1 rounded hover:bg-gray-200 disabled:opacity-50"
+                        className="p-1 rounded hover:bg-gray-200 dark:hover:bg-zinc-800 disabled:opacity-50 transition-colors text-muted-foreground cursor-pointer"
                         disabled={loading || !app?.id}
                         title="Refresh Design File"
                     >
                         <RefreshCw size={16} />
                     </button>
+
+                    <div className="h-4 w-px bg-border mx-1"></div>
+
+                    {/* 2. Generate Tasklist Button */}
+                    <Button
+                        variant={isTasklistStale ? "default" : "outline"}
+                        size="sm"
+                        className={`h-7 text-xs transition-colors cursor-pointer ${isTasklistStale ? 'bg-amber-500 hover:bg-amber-600 text-white border-transparent shadow-sm' : 'text-muted-foreground'}`}
+                        onClick={() => setIsTasklistStale(false)}
+                    >
+                        <ListTodo size={14} className="mr-1.5" />
+                        {isTasklistStale ? 'Generate Tasklist ✨' : 'Tasklist Up-to-date'}
+                    </Button>
+
+                    {/* 3. Check Issues Button (Visible if edits detected) */}
+                    {hasUncheckedChanges && (
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            className="h-7 text-xs border-dashed border-amber-500 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors cursor-pointer"
+                            onClick={handleCheckIssues}
+                        >
+                            <AlertCircle size={14} className="mr-1.5" />
+                            Edit detected, check issues
+                        </Button>
+                    )}
+
+                    {/* 4. Issues Button */}
+                    {issues.length > 0 && (
+                        <Button
+                            variant={isIssuesPanelOpen ? "default" : "outline"}
+                            size="sm"
+                            className={`h-7 text-xs relative transition-colors cursor-pointer ${isIssuesPanelOpen ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100 dark:bg-red-950/30 dark:border-red-900/50' : 'text-muted-foreground hover:text-foreground'}`}
+                            onClick={() => setIsIssuesPanelOpen(!isIssuesPanelOpen)}
+                        >
+                            <AlertCircle size={14} className={`mr-1.5 ${isIssuesPanelOpen ? 'text-red-600' : 'text-red-500'}`} />
+                            Issues
+                            <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white shadow-sm ring-2 ring-white dark:ring-zinc-950">
+                                {issues.length}
+                            </span>
+                        </Button>
+                    )}
                 </div>
 
                 <div className="flex bg-muted p-1 rounded-md">
                     <button
                         onClick={() => setViewMode('canvas')}
-                        className={`px-3 py-1 text-xs font-medium rounded-sm flex items-center gap-1 transition-all ${viewMode === 'canvas' ? 'bg-background shadow-sm' : 'text-muted-foreground'}`}
+                        className={`px-3 py-1 text-xs font-medium rounded-sm flex items-center gap-1 transition-all cursor-pointer ${viewMode === 'canvas' ? 'bg-background shadow-sm' : 'text-muted-foreground'}`}
                     >
                         <Layout size={14} /> UI Canvas
                     </button>
                     <button
                         onClick={() => setViewMode('code')}
-                        className={`px-3 py-1 text-xs font-medium rounded-sm flex items-center gap-1 transition-all ${viewMode === 'code' ? 'bg-background shadow-sm' : 'text-muted-foreground'}`}
+                        className={`px-3 py-1 text-xs font-medium rounded-sm flex items-center gap-1 transition-all cursor-pointer ${viewMode === 'code' ? 'bg-background shadow-sm' : 'text-muted-foreground'}`}
                     >
                         <Code size={14} /> Raw File
                     </button>
                 </div>
             </div>
+
+            {/* --- SEMANTIC ISSUES PANEL --- */}
+            {isIssuesPanelOpen && issues.length > 0 && (
+                <div className="absolute top-[115px] right-6 w-[450px] max-h-[calc(100%-140px)] z-50 bg-white dark:bg-zinc-950 border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-top-4 fade-in duration-200">
+                    <div className="bg-slate-50 dark:bg-zinc-900 border-b px-4 py-3 flex justify-between items-center">
+                        <div>
+                            <h3 className="font-bold text-sm flex items-center gap-2">
+                                Design Semantics Review
+                            </h3>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">Understanding why these issues affect your app's UX</p>
+                        </div>
+                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setIsIssuesPanelOpen(false)}>✕</Button>
+                    </div>
+
+                    <div className="overflow-y-auto p-2 space-y-2">
+                        {issues.map((issue) => {
+                            const isError = issue.severity === 'error';
+                            const isWarning = issue.severity === 'warning';
+                            
+                            return (
+                                <div key={issue.id} className={`p-4 rounded-lg border ${isError ? 'bg-red-50/50 border-red-100 dark:bg-red-950/10 dark:border-red-900/30' : isWarning ? 'bg-amber-50/50 border-amber-100 dark:bg-amber-950/10 dark:border-amber-900/30' : 'bg-blue-50/50 border-blue-100 dark:bg-blue-950/10 dark:border-blue-900/30'}`}>
+                                    
+                                    {/* Header: Severity & Location */}
+                                    <div className="flex items-start gap-2 mb-2">
+                                        <div className="mt-0.5">
+                                            {isError ? <XCircle size={14} className="text-red-500" /> : 
+                                             isWarning ? <AlertTriangle size={14} className="text-amber-500" /> : 
+                                             <AlertCircle size={14} className="text-blue-500" />}
+                                        </div>
+                                        <div className="flex-1">
+                                            <h4 className={`text-xs font-bold ${isError ? 'text-red-700 dark:text-red-400' : isWarning ? 'text-amber-700 dark:text-amber-400' : 'text-blue-700 dark:text-blue-400'}`}>
+                                                {issue.title}
+                                            </h4>
+                                            <span className="text-[10px] font-mono text-muted-foreground bg-white dark:bg-zinc-900 px-1.5 py-0.5 rounded border mt-1 inline-block">
+                                                in {issue.element}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Semantic Impact (The "Why") */}
+                                    <div className="ml-5 mt-3 space-y-3">
+                                        <div>
+                                            <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-1">UX Impact</div>
+                                            <p className="text-[11px] leading-relaxed text-foreground/80">
+                                                {issue.impact}
+                                            </p>
+                                        </div>
+                                        
+                                        {/* Resolution Suggestion */}
+                                        <div className="bg-white dark:bg-zinc-900 rounded p-2 border border-border/50 flex gap-2 items-start">
+                                            <Lightbulb size={12} className="text-emerald-500 mt-0.5 flex-shrink-0" />
+                                            <div>
+                                                <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">Suggested Fix</div>
+                                                <p className="text-[11px] text-foreground/90">{issue.suggestion}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             <div className="flex-1 overflow-hidden relative">
                 {viewMode === 'canvas' ? (
