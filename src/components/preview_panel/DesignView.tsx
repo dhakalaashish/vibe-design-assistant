@@ -25,36 +25,36 @@ export const DesignView = ({ loading, app }: DesignViewProps) => {
     return (
         <div className="flex flex-col h-full bg-[var(--background)]">
             {/* Top Navigation Tabs */}
-            <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-[var(--background-lightest)]">
+            <div className="flex w-full pt-2 px-2 gap-1 border-b border-border bg-muted/20 shadow-inner">
                 <button
                     onClick={() => setPreviewMode("design")}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    className={`flex-1 py-3 text-sm font-semibold rounded-t-xl transition-all duration-200 border relative cursor-pointer ${
                         activeTab === "design"
-                            ? "bg-[var(--background)] shadow-sm text-foreground border border-border"
-                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50 border border-transparent"
+                            ? "bg-background text-primary border-border border-b-transparent shadow-[0_-4px_10px_-4px_rgba(0,0,0,0.05)] z-10 -mb-px"
+                            : "bg-black/5 dark:bg-white/5 text-muted-foreground border-transparent border-b-border hover:bg-black/10 dark:hover:bg-white/10 hover:text-foreground"
                     }`}
                 >
-                    Design Semantics
+                    DESIGN SEMANTICS
                 </button>
                 <button
                     onClick={() => setPreviewMode("heuristics")}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    className={`flex-1 py-3 text-sm font-semibold rounded-t-xl transition-all duration-200 border relative cursor-pointer ${
                         activeTab === "heuristics"
-                            ? "bg-[var(--background)] shadow-sm text-foreground border border-border"
-                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50 border border-transparent"
+                            ? "bg-background text-primary border-border border-b-transparent shadow-[0_-4px_10px_-4px_rgba(0,0,0,0.05)] z-10 -mb-px"
+                            : "bg-black/5 dark:bg-white/5 text-muted-foreground border-transparent border-b-border hover:bg-black/10 dark:hover:bg-white/10 hover:text-foreground"
                     }`}
                 >
-                    Design Heuristics
+                    DESIGN HEURISTICS
                 </button>
                 <button
                     onClick={() => setPreviewMode("guided-build")}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    className={`flex-1 py-3 text-sm font-semibold rounded-t-xl transition-all duration-200 border relative cursor-pointer ${
                         activeTab === "guided-build"
-                            ? "bg-[var(--background)] shadow-sm text-foreground border border-border"
-                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50 border border-transparent"
+                            ? "bg-background text-primary border-border border-b-transparent shadow-[0_-4px_10px_-4px_rgba(0,0,0,0.05)] z-10 -mb-px"
+                            : "bg-black/5 dark:bg-white/5 text-muted-foreground border-transparent border-b-border hover:bg-black/10 dark:hover:bg-white/10 hover:text-foreground"
                     }`}
                 >
-                    Guided Build
+                    GUIDED BUILD
                 </button>
             </div>
 

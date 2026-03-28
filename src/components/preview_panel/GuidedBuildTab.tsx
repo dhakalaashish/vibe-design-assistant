@@ -463,7 +463,7 @@ function FindingsTable({
                                 <td className="px-4 py-4 align-top text-right">
                                     <div className="flex flex-col gap-2 items-end">
                                         {finding.isBuilt && finding.isVerified ? (
-                                            <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800 uppercase gap-1 py-1.5 px-3">
+                                            <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800 uppercase gap-1 py-1.5 px-3 cursor-default hover:bg-green-100 hover:shadow-sm">
                                                 <CheckCircle2 className="w-4 h-4" />
                                                 Verified
                                             </Badge>
@@ -478,8 +478,7 @@ function FindingsTable({
                                                         : "cursor-pointer hover:bg-secondary/80 hover:shadow-sm active:scale-95"
                                                     }`}
                                             >
-                                                <Check className="w-4 h-4" />
-                                                Check Completion
+                                                Verify Completion
                                             </Button>
                                         ) : (
                                             <>

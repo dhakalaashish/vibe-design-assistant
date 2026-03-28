@@ -1523,17 +1523,38 @@ const DesignCanvasUI = ({ content }: { content: string }) => {
 
             {/* 1. Mode Switcher (TOP BAR) */}
             <div className="flex items-center justify-between px-4 py-2 border-b bg-white dark:bg-zinc-900 z-10 min-h-[56px]">
-                {/* Left Side: Mode Buttons */}
-                <div className="flex items-center gap-2 flex-shrink-0">
-                    <Button variant={mode === 'project' ? 'default' : 'outline'} size="sm" onClick={() => setMode('project')}>
-                        <Briefcase className="w-4 h-4 mr-2" /> Project
-                    </Button>
-                    <Button variant={mode === 'structure' ? 'default' : 'outline'} size="sm" onClick={() => setMode('structure')}>
-                        <Layout className="w-4 h-4 mr-2" /> Screen
-                    </Button>
-                    <Button variant={mode === 'flows' ? 'default' : 'outline'} size="sm" onClick={() => setMode('flows')}>
-                        <MousePointerClick className="w-4 h-4 mr-2" /> Flows
-                    </Button>
+                {/* Left Side: Mode Buttons (Segmented Control) */}
+                <div className="flex items-center p-1 bg-muted/50 dark:bg-zinc-800/50 rounded-lg border border-border/50 flex-shrink-0">
+                    <button
+                        onClick={() => setMode('project')}
+                        className={`flex items-center px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${
+                            mode === 'project'
+                                ? 'bg-white dark:bg-zinc-700 text-foreground shadow-sm ring-1 ring-black/5 dark:ring-white/10'
+                                : 'text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5'
+                        }`}
+                    >
+                        <Briefcase className="w-3.5 h-3.5 mr-1.5" /> Project
+                    </button>
+                    <button
+                        onClick={() => setMode('structure')}
+                        className={`flex items-center px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${
+                            mode === 'structure'
+                                ? 'bg-white dark:bg-zinc-700 text-foreground shadow-sm ring-1 ring-black/5 dark:ring-white/10'
+                                : 'text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5'
+                        }`}
+                    >
+                        <Layout className="w-3.5 h-3.5 mr-1.5" /> Screen
+                    </button>
+                    <button
+                        onClick={() => setMode('flows')}
+                        className={`flex items-center px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${
+                            mode === 'flows'
+                                ? 'bg-white dark:bg-zinc-700 text-foreground shadow-sm ring-1 ring-black/5 dark:ring-white/10'
+                                : 'text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5'
+                        }`}
+                    >
+                        <MousePointerClick className="w-3.5 h-3.5 mr-1.5" /> Flows
+                    </button>
                 </div>
 
                 {/* Right Side: View Controls (Unified Row with Truncation) */}
