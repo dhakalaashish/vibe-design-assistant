@@ -152,7 +152,7 @@ function RunGuidedBuildButton({
             ) : (
                 <>
                     <Hammer className="w-4 h-4" />
-                    {hasFindings ? "Re-Run Guided Build Analysis" : "Run Guided Build Analysis"}
+                    {hasFindings ? "Re-Generate Tasklist" : "Generate Tasklist"}
                 </>
             )}
         </Button>
@@ -281,7 +281,7 @@ function NoAppSelectedView() {
                 No App Selected
             </h2>
             <p className="text-gray-600 dark:text-gray-400 max-w-md">
-                Select an app to run Guided Build analysis.
+                Select an app to Generate Tasklist.
             </p>
         </div>
     );
@@ -678,7 +678,7 @@ export const GuidedBuildTab = () => {
             setSelectedChatId(chatId);
             await navigate({ to: "/chat", search: { id: chatId } });
 
-            const prompt = `I want to discuss this feature gap from the Guided Build analysis before building it:
+            const prompt = `I want to discuss this feature gap from the Guided Tasklist before building it:
 
                             **${finding.title}**
                             ${finding.description}
@@ -822,7 +822,7 @@ export const GuidedBuildTab = () => {
                 },
             });
         } catch (err) {
-            showError(`Failed to run guided build analysis: ${err}`);
+            showError(`Failed to run generate tasklist: ${err}`);
             setIsRunningReview(false);
         }
     };
@@ -852,7 +852,7 @@ export const GuidedBuildTab = () => {
 
             // Extract the tasks from the description (assuming the backend puts <dyad-tasks> inside description)
             // or construct a generic prompt if not explicit.
-            const prompt = `I am ready to implement this feature gap identified in the Guided Build analysis:
+            const prompt = `I am ready to implement this feature gap identified in the Guided Tasklist:
 
                             **${finding.title}** (${finding.level})
 

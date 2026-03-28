@@ -62,7 +62,7 @@ export const DesignView = ({ loading, app }: DesignViewProps) => {
             <div className="flex-1 overflow-hidden">
                 {activeTab === "design" && <DesignSemanticsTab loading={loading} app={app} />}
                 
-                {activeTab === "heuristics" && <DesignHeuristicsTab />}
+                {activeTab === "heuristics" && <DesignHeuristicsTab app={app} />}
                 
                 {activeTab === "guided-build" && <GuidedBuildTab />}
             </div>

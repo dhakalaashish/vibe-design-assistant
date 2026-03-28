@@ -33,7 +33,7 @@ export function registerGuidedBuildHandlers() {
       .limit(1);
 
     if (result.length === 0) {
-      throw new Error("No guided build analysis found for this app");
+      throw new Error("No guided tasklist found for this app");
     }
 
     let messageContent = result[0].content;
@@ -110,7 +110,7 @@ export function registerGuidedBuildHandlers() {
         .limit(1);
 
       if (result.length === 0) {
-        throw new Error("No guided build analysis found to update.");
+        throw new Error("No guided tasklist found to update.");
       }
 
       const message = result[0];

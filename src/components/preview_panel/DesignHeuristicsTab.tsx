@@ -1,5 +1,5 @@
 import { Checkbox } from "@/components/ui/checkbox";
-import { BookOpen, FileCode2, Settings2 } from "lucide-react";
+import { BookOpen, FileCode2, Settings2, AlertTriangle, AlertCircle } from "lucide-react";
 import { useAtomValue } from "jotai";
 import { selectedAppIdAtom } from "@/atoms/appAtoms";
 import React, { useState, useRef, useEffect } from "react";
@@ -168,14 +168,22 @@ const BASE_HEURISTICS = [
   { id: "apple_hig", name: "Apple Human Interface Guidelines" },
 ];
 
-export const DesignHeuristicsTab = () => {
+export const DesignHeuristicsTab = ({ app }: { app: any }) => {
   const appId = useAtomValue(selectedAppIdAtom);
   const [activeDoc, setActiveDoc] = useState<string>("app-specific");
   
   // Track which base heuristics are checked to be included
   const [selectedHeuristics, setSelectedHeuristics] = useState<Set<string>>(
-    new Set(["nielsen", "wcag"]) // Default a few to checked
+    new Set(["nielsen", "wcag"])
   );
+
+  // --- NEW FILE & STATUS CHECKS ---
+  const hasHeuristicsFile = app?.files?.includes("docs/app_design_heuristic.md");
+  const hasSemanticFile = app?.files?.includes("DESIGN_SEMANTIC.md");
+  
+  // TODO: Link these to your actual Jotai atoms or global state from the Semantics tab
+  const hasSemanticIssues = false; // Set to true if there are >0 issues
+  const hasUncheckedEdits = false; // Set to true if "Edit detected" is active
 
   const toggleSelection = (id: string, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent clicking the checkbox from triggering the row click
@@ -238,7 +246,11 @@ export const DesignHeuristicsTab = () => {
         </div>
 
         {/* Compile Action */}
-        <div className="p-4 border-t border-border bg-muted/20">
+        <div className="p-4 border-t border-border bg-muted/20 space-y-3">
+          <div className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 p-2 rounded border border-amber-200 dark:border-amber-800/50 flex items-start gap-2 leading-tight">
+            <AlertCircle size={12} className="flex-shrink-0 mt-0.5" />
+            <p><strong>Warning:</strong> The current heuristics are auto-generated to match your Design Semantics. Compiling custom frameworks may cause inconsistencies.</p>
+          </div>
           <Button onClick={handleCompile} className="w-full gap-2" disabled={selectedHeuristics.size === 0}>
             <Settings2 size={16} />
             Compile Selected
@@ -249,10 +261,46 @@ export const DesignHeuristicsTab = () => {
       {/* RIGHT SIDE: Editor or Reference Viewer */}
       <div className="flex-1 flex flex-col min-w-0">
         {activeDoc === "app-specific" ? (
-          // If viewing the app-specific file, load the actual Editor
-          <DesignFileEditor appId={appId} filePath="DESIGN_HEURISTICS.md" />
+          hasHeuristicsFile ? (
+            // 1. App Specific Heuristics Exist -> Show as uneditable (pointer-events-none makes it visually read-only)
+            <div className="relative h-full">
+               <div className="absolute inset-0 z-10 bg-transparent cursor-not-allowed" title="This file is auto-generated and read-only."></div>
+               <div className="h-full pointer-events-none opacity-90">
+                 <DesignFileEditor appId={appId} filePath="docs/app_design_heuristic.md" />
+               </div>
+            </div>
+          ) : !hasSemanticFile ? (
+            // 2. No Design Semantics Exist -> Prompt to create them
+            <div className="flex flex-col items-center justify-center h-full p-8 text-center text-muted-foreground animate-in fade-in">
+                <FileCode2 size={64} className="mb-6 opacity-20" />
+                <h2 className="text-2xl font-semibold text-foreground mb-2">Design Semantics Required</h2>
+                <p className="max-w-md text-sm leading-relaxed mb-6">
+                    You need to establish your core Design Semantics first before the AI can generate App Specific Design Heuristics.
+                </p>
+            </div>
+          ) : (hasSemanticIssues || hasUncheckedEdits) ? (
+            // 3. Semantics Exist but have issues/edits -> Block generation
+            <div className="flex flex-col items-center justify-center h-full p-8 text-center text-muted-foreground animate-in fade-in">
+                <AlertTriangle size={64} className="mb-6 text-amber-500 opacity-60" />
+                <h2 className="text-2xl font-semibold text-foreground mb-2">Resolve Semantics Issues</h2>
+                <p className="max-w-md text-sm leading-relaxed">
+                    Your Design Semantics file has unchecked edits or active issues. Please switch to the Design Semantics tab, verify your changes, and fix any problems before generating heuristics.
+                </p>
+            </div>
+          ) : (
+            // 4. Semantics Exist and are clean -> Show Generate Button
+            <div className="flex flex-col items-center justify-center h-full p-8 text-center text-muted-foreground animate-in fade-in">
+                <BookOpen size={64} className="mb-6 text-primary opacity-50" />
+                <h2 className="text-2xl font-semibold text-foreground mb-2">Generate App Specific Design Heuristics</h2>
+                <p className="max-w-xl text-sm leading-relaxed mb-6">
+                    <strong>Design Heuristics</strong> are broad rules of thumb for UI/UX design (like "consistency" or "error prevention"). 
+                    Generating an app-specific file translates your exact Design Semantics into actionable, tailored evaluation criteria for this specific project.
+                </p>
+                <Button size="lg" onClick={() => console.log("Trigger Generation")}>Generate App Specific Design Heuristics</Button>
+            </div>
+          )
         ) : (
-          // If viewing a base framework, show a reference screen (You can later hook this up to a read-only markdown viewer)
+          // If viewing a base framework, show a reference screen
           <div className="flex flex-col items-center justify-center h-full p-8 text-center text-muted-foreground">
             <BookOpen size={64} className="mb-6 opacity-20" />
             <h2 className="text-2xl font-semibold text-foreground mb-2">
