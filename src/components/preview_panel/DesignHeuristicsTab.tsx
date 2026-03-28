@@ -278,15 +278,6 @@ export const DesignHeuristicsTab = ({ app }: { app: any }) => {
                     You need to establish your core Design Semantics first before the AI can generate App Specific Design Heuristics.
                 </p>
             </div>
-          ) : (hasSemanticIssues || hasUncheckedEdits) ? (
-            // 3. Semantics Exist but have issues/edits -> Block generation
-            <div className="flex flex-col items-center justify-center h-full p-8 text-center text-muted-foreground animate-in fade-in">
-                <AlertTriangle size={64} className="mb-6 text-amber-500 opacity-60" />
-                <h2 className="text-2xl font-semibold text-foreground mb-2">Resolve Semantics Issues</h2>
-                <p className="max-w-md text-sm leading-relaxed">
-                    Your Design Semantics file has unchecked edits or active issues. Please switch to the Design Semantics tab, verify your changes, and fix any problems before generating heuristics.
-                </p>
-            </div>
           ) : (
             // 4. Semantics Exist and are clean -> Show Generate Button
             <div className="flex flex-col items-center justify-center h-full p-8 text-center text-muted-foreground animate-in fade-in">
