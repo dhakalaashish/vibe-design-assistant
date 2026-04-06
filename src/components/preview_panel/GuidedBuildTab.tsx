@@ -1,10 +1,7 @@
 import { useAtomValue, useSetAtom } from "jotai";
 import { selectedAppIdAtom } from "@/atoms/appAtoms";
 import { selectedChatIdAtom } from "@/atoms/chatAtoms";
-// You might need to create a useAutoBuild hook similar to useSecurityReview,
-// or reuse useSecurityReview if the backend returns the same structure but with different data.
-// For now, I'll assume we adapt useSecurityReview or you rename it later.
-import { useAutoBuild } from "@/hooks/useAutoBuild";
+import { useGuidedBuild } from "@/hooks/useGuidedBuild";
 import { IpcClient } from "@/ipc/ipc_client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,20 +23,26 @@ import {
     Pencil,
     Wrench,
     Construction,
+    Check,
 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useStreamChat } from "@/hooks/useStreamChat";
 import { showError, showSuccess, showWarning } from "@/lib/toast";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import type { SecurityFinding, SecurityReviewResult } from "@/ipc/ipc_types"; // You'll likely define AutoBuildFinding types later
+import type { GuidedBuildFinding, GuidedBuildReviewResult } from "@/ipc/ipc_types"; // You'll likely define GuidedBuildFinding types later
 import { useState, useEffect } from "react";
 import { VanillaMarkdownParser } from "@/components/chat/DyadMarkdownParser";
 import { useLoadAppFile } from "@/hooks/useLoadAppFile";
 import { useQueryClient } from "@tanstack/react-query";
+import { 
+    GUIDED_BUILD_TASK_TITLE_PREFIX, 
+    GUIDED_VERIFICATION_TITLE_PREFIX 
+} from "@/components/chat/ChatInput";
+import { improvePromptInNewChat } from "@/components/chat/DesignInNewChat";
 
-// --- ADAPTED TYPES & HELPERS FOR AUTO BUILD ---
-export const AUTO_BUILD_TITLE_PREFIX = "# Auto Build"
+// --- ADAPTED TYPES & HELPERS FOR GUIDED BUILD ---
+export const GUIDED_BUILD_TITLE_PREFIX = "# Guided Build"
 
 // Mapping "status" from the prompt (missing, partial, violation) to UI
 const getStatusColor = (status: string) => {
@@ -70,7 +73,7 @@ const getStatusIcon = (status: string) => {
 
 const DESCRIPTION_PREVIEW_LENGTH = 150;
 
-// Reusing the SecurityFinding type structure for now, assuming 
+// Reusing the GuidedBuildFinding type structure for now, assuming 
 // 'level' maps to 'status' (violation/missing/partial)
 const createFindingKey = (finding: {
     title: string;
@@ -104,19 +107,6 @@ const formatTimeAgo = (input: string | number | Date): string => {
     return `${days} day${days === 1 ? "" : "s"} ago`;
 };
 
-const getStatusOrder = (status: string): number => {
-    switch (status.toLowerCase()) {
-        case "violation":
-            return 0;
-        case "missing":
-            return 1;
-        case "partial":
-            return 2;
-        default:
-            return 3;
-    }
-};
-
 function StatusBadge({ status }: { status: string }) {
     return (
         <Badge
@@ -129,12 +119,14 @@ function StatusBadge({ status }: { status: string }) {
     );
 }
 
-function RunAutoBuildButton({
+function RunGuidedBuildButton({
     isRunning,
     onRun,
+    hasFindings,
 }: {
     isRunning: boolean;
     onRun: () => void;
+    hasFindings: boolean;
 }) {
     return (
         <Button onClick={onRun} className="gap-2" disabled={isRunning}>
@@ -160,14 +152,14 @@ function RunAutoBuildButton({
             ) : (
                 <>
                     <Hammer className="w-4 h-4" />
-                    Run Auto Build Analysis
+                    {hasFindings ? "Re-Generate Tasklist" : "Generate Tasklist"}
                 </>
             )}
         </Button>
     );
 }
 
-function ReviewSummary({ data }: { data: SecurityReviewResult }) {
+function ReviewSummary({ data }: { data: GuidedBuildReviewResult }) {
     const counts = data.findings.reduce(
         (acc, finding) => {
             // finding.level here corresponds to 'status' (violation, missing, etc.)
@@ -208,47 +200,26 @@ function ReviewSummary({ data }: { data: SecurityReviewResult }) {
     );
 }
 
-function AutoBuildHeader({
+function GuidedBuildHeader({
     isRunning,
     onRun,
     data,
+    hasFindings,
     onOpenEditDesign,
-    selectedCount,
-    onFixSelected,
-    isFixingSelected,
 }: {
     isRunning: boolean;
     onRun: () => void;
-    data?: SecurityReviewResult | undefined;
+    data?: GuidedBuildReviewResult | undefined;
+    hasFindings: boolean;
     onOpenEditDesign: () => void;
-    selectedCount: number;
-    onFixSelected: () => void;
-    isFixingSelected: boolean;
 }) {
-    const [isButtonVisible, setIsButtonVisible] = useState(false);
-    const [shouldRender, setShouldRender] = useState(false);
-
-    useEffect(() => {
-        if (selectedCount > 0) {
-            setShouldRender(true);
-            setTimeout(() => setIsButtonVisible(true), 10);
-        } else {
-            setIsButtonVisible(false);
-            const timer = setTimeout(() => setShouldRender(false), 300);
-            return () => clearTimeout(timer);
-        }
-    }, [selectedCount]);
-
     return (
         <div className="sticky top-0 z-10 bg-background pt-3 pb-3 space-y-2">
             <div className="flex items-center justify-between gap-2">
                 <div>
                     <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-1 flex items-center gap-2">
                         <Hammer className="w-5 h-5" />
-                        Auto Build
-                        <Badge variant="secondary" className="uppercase tracking-wide">
-                            beta
-                        </Badge>
+                        Guided Build
                     </h1>
                     <div className="text-sm">
                         <p className="text-gray-500">
@@ -262,53 +233,7 @@ function AutoBuildHeader({
                         <Pencil className="w-4 h-4 mr-2" />
                         Edit Design Semantic
                     </Button>
-                    <div className="flex items-center gap-2">
-                        <Button
-                            variant="outline"
-                            onClick={onFixSelected}
-                            className="gap-2 transition-all duration-300"
-                            disabled={isFixingSelected}
-                            style={{
-                                visibility: shouldRender ? "visible" : "hidden",
-                                opacity: isButtonVisible ? 1 : 0,
-                                transform: isButtonVisible
-                                    ? "translateY(0)"
-                                    : "translateY(-8px)",
-                                pointerEvents: shouldRender ? "auto" : "none",
-                            }}
-                        >
-                            {isFixingSelected ? (
-                                <>
-                                    <svg
-                                        className="w-4 h-4 animate-spin"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                    >
-                                        <circle
-                                            className="opacity-25"
-                                            cx="12"
-                                            cy="12"
-                                            r="10"
-                                            stroke="currentColor"
-                                            strokeWidth="4"
-                                        />
-                                        <path
-                                            className="opacity-75"
-                                            fill="currentColor"
-                                            d="m4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 0 1 4 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                        />
-                                    </svg>
-                                    Building {selectedCount} Task{selectedCount !== 1 ? "s" : ""}...
-                                </>
-                            ) : (
-                                <>
-                                    <Wrench className="w-4 h-4" />
-                                    Build {selectedCount} Task{selectedCount !== 1 ? "s" : ""}
-                                </>
-                            )}
-                        </Button>
-                        <RunAutoBuildButton isRunning={isRunning} onRun={onRun} />
-                    </div>
+                    <RunGuidedBuildButton isRunning={isRunning} onRun={onRun} hasFindings={hasFindings} />
                 </div>
             </div>
         </div>
@@ -356,7 +281,7 @@ function NoAppSelectedView() {
                 No App Selected
             </h2>
             <p className="text-gray-600 dark:text-gray-400 max-w-md">
-                Select an app to run Auto Build analysis.
+                Select an app to Generate Tasklist.
             </p>
         </div>
     );
@@ -418,16 +343,16 @@ function NoReviewCard({
                         No Analysis Found
                     </h3>
                     <p className="text-gray-600 dark:text-gray-400 mb-4">
-                        Run Auto Build to find missing features and deviations from your design specs.
+                        Run Guided Build to find missing features and deviations from your design specs.
                     </p>
-                    <RunAutoBuildButton isRunning={isRunning} onRun={onRun} />
+                    <RunGuidedBuildButton isRunning={isRunning} onRun={onRun} hasFindings={false} />
                 </div>
             </CardContent>
         </Card>
     );
 }
 
-function AllClearCard({ data }: { data?: SecurityReviewResult }) {
+function AllClearCard({ data }: { data?: GuidedBuildReviewResult }) {
     return (
         <Card>
             <CardContent className="pt-6">
@@ -454,156 +379,156 @@ function AllClearCard({ data }: { data?: SecurityReviewResult }) {
 
 function FindingsTable({
     findings,
-    onOpenDetails,
+    onEditManually,
+    onDiscussPrompt,
+    onTestCompletion,
     onFix,
     fixingFindingKey,
-    selectedFindings,
-    onToggleSelection,
-    onToggleSelectAll,
 }: {
-    findings: SecurityFinding[];
-    onOpenDetails: (finding: SecurityFinding) => void;
-    onFix: (finding: SecurityFinding) => void;
+    findings: GuidedBuildFinding[];
+    onEditManually: (finding: GuidedBuildFinding) => void;
+    onDiscussPrompt: (finding: GuidedBuildFinding) => void;
+    onTestCompletion: (finding: GuidedBuildFinding) => void;
+    onFix: (finding: GuidedBuildFinding) => void;
     fixingFindingKey?: string | null;
-    selectedFindings: Set<string>;
-    onToggleSelection: (findingKey: string) => void;
-    onToggleSelectAll: () => void;
 }) {
-    const sortedFindings = [...findings].sort(
-        (a, b) => getStatusOrder(a.level) - getStatusOrder(b.level),
-    );
+    // Local state to track which rows are expanded in-place
+    const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
 
-    const allSelected =
-        sortedFindings.length > 0 &&
-        sortedFindings.every((finding) =>
-            selectedFindings.has(createFindingKey(finding)),
-        );
+    // GLOBAL LOCK CHECK: Returns true if ANY finding is currently processing
+    const isAnyTaskInProgress = findings.some((f) => f.isInProgress);
+
+    const toggleExpand = (key: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setExpandedKeys(prev => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+        });
+    };
 
     return (
-        <div
-            className="border rounded-lg overflow-hidden"
-            data-testid="autobuild-findings-table"
-        >
+        <div className="border rounded-lg overflow-hidden" data-testid="guidedbuild-findings-table">
             <table className="w-full">
                 <thead className="bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
                     <tr>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider w-12">
-                            <Checkbox
-                                checked={allSelected}
-                                onCheckedChange={onToggleSelectAll}
-                                aria-label="Select all issues"
-                            />
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider w-24">
-                            Status
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                            Gap Detected
-                        </th>
-                        <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider w-32">
-                            Action
-                        </th>
+                        {/* Removed Checkmark & Status Columns */}
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">Gap Detected</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider w-40">Action</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {sortedFindings.map((finding, index) => {
-                        const isLongDescription =
-                            finding.description.length > DESCRIPTION_PREVIEW_LENGTH;
-                        const displayDescription = isLongDescription
-                            ? finding.description.substring(0, DESCRIPTION_PREVIEW_LENGTH) +
-                            "..."
-                            : finding.description;
+                    {findings.map((finding, index) => {
                         const findingKey = createFindingKey(finding);
+                        const isExpanded = expandedKeys.has(findingKey);
+                        const isLongDescription = finding.description.length > DESCRIPTION_PREVIEW_LENGTH;
+                        const displayDescription = (isLongDescription && !isExpanded)
+                            ? finding.description.substring(0, DESCRIPTION_PREVIEW_LENGTH) + "..."
+                            : finding.description;
+
                         const isFixing = fixingFindingKey === findingKey;
-                        const isSelected = selectedFindings.has(findingKey);
 
                         return (
-                            <tr
-                                key={index}
-                                className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
-                            >
-                                <td className="px-4 py-4 align-top">
-                                    <Checkbox
-                                        checked={isSelected}
-                                        onCheckedChange={() => onToggleSelection(findingKey)}
-                                        aria-label={`Select ${finding.title}`}
-                                        onClick={(e) => e.stopPropagation()}
-                                    />
-                                </td>
-                                <td className="px-4 py-4 align-top">
-                                    <StatusBadge status={finding.level} />
-                                </td>
+                            <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
+
+                                {/* 1. GAP DETECTED DETAILS COLUMN */}
                                 <td className="px-4 py-4">
-                                    <div
-                                        className="space-y-2 cursor-pointer"
-                                        role="button"
-                                        tabIndex={0}
-                                        onClick={() => onOpenDetails(finding)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === "Enter" || e.key === " ") {
-                                                e.preventDefault();
-                                                onOpenDetails(finding);
-                                            }
-                                        }}
-                                    >
-                                        <div className="font-medium text-gray-900 dark:text-gray-100">
-                                            {finding.title}
+                                    <div className="space-y-3">
+                                        <div className="flex flex-col items-start gap-1.5">
+                                            {/* Status Badge moved above the title */}
+                                            <StatusBadge status={finding.level} />
+                                            <div className="font-semibold text-gray-900 dark:text-gray-100 text-base">
+                                                {finding.title}
+                                            </div>
                                         </div>
                                         <div className="text-sm text-gray-700 dark:text-gray-300 prose prose-sm dark:prose-invert max-w-none">
                                             <VanillaMarkdownParser content={displayDescription} />
                                         </div>
                                         {isLongDescription && (
                                             <Button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    onOpenDetails(finding);
-                                                }}
+                                                onClick={(e) => toggleExpand(findingKey, e)}
                                                 size="sm"
                                                 variant="ghost"
-                                                className="h-7 px-2 py-0 gap-1"
+                                                className="h-7 px-2 py-0 gap-1 mt-1 text-blue-600 dark:text-blue-400 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20"
                                             >
-                                                <ChevronDown className="w-3 h-3" />
-                                                Show more
+                                                {isExpanded ? <ChevronDown className="w-3 h-3 rotate-180" /> : <ChevronDown className="w-3 h-3" />}
+                                                {isExpanded ? "Show less" : "Show more"}
                                             </Button>
                                         )}
                                     </div>
                                 </td>
+
+                                {/* 2. ACTION BUTTONS COLUMN */}
                                 <td className="px-4 py-4 align-top text-right">
-                                    <Button
-                                        onClick={() => onFix(finding)}
-                                        size="sm"
-                                        variant="default"
-                                        className="gap-2"
-                                        disabled={isFixing}
-                                    >
-                                        {isFixing ? (
-                                            <>
-                                                <svg
-                                                    className="w-4 h-4 animate-spin"
-                                                    fill="none"
-                                                    viewBox="0 0 24 24"
-                                                >
-                                                    <circle
-                                                        className="opacity-25"
-                                                        cx="12"
-                                                        cy="12"
-                                                        r="10"
-                                                        stroke="currentColor"
-                                                        strokeWidth="4"
-                                                    />
-                                                    <path
-                                                        className="opacity-75"
-                                                        fill="currentColor"
-                                                        d="m4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 0 1 4 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                                    />
-                                                </svg>
-                                                Building...
-                                            </>
+                                    <div className="flex flex-col gap-2 items-end">
+                                        {finding.isBuilt && finding.isVerified ? (
+                                            <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800 uppercase gap-1 py-1.5 px-3 cursor-default hover:bg-green-100 hover:shadow-sm">
+                                                <CheckCircle2 className="w-4 h-4" />
+                                                Verified
+                                            </Badge>
+                                        ) : finding.isBuilt ? (
+                                            <Button
+                                                onClick={() => onTestCompletion(finding)}
+                                                size="sm"
+                                                variant="secondary"
+                                                disabled={isAnyTaskInProgress}
+                                                className={`w-full gap-2 transition-all ${isAnyTaskInProgress
+                                                        ? "cursor-not-allowed opacity-50"
+                                                        : "cursor-pointer hover:bg-secondary/80 hover:shadow-sm active:scale-95"
+                                                    }`}
+                                            >
+                                                Verify Completion
+                                            </Button>
                                         ) : (
-                                            <>Build This</>
+                                            <>
+                                                <Button
+                                                    onClick={() => onFix(finding)}
+                                                    size="sm"
+                                                    variant="default"
+                                                    disabled={isAnyTaskInProgress || isFixing}
+                                                    className={`w-full gap-2 ${isAnyTaskInProgress || isFixing
+                                                            ? "cursor-not-allowed opacity-50"
+                                                            : "cursor-pointer"
+                                                        }`}
+                                                >
+                                                    {isFixing ? (
+                                                        <>
+                                                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                                <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 0 1 4 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                                            </svg>
+                                                            Building...
+                                                        </>
+                                                    ) : (
+                                                        "Build This"
+                                                    )}
+                                                </Button>
+                                                <Button
+                                                    onClick={() => onEditManually(finding)}
+                                                    size="sm"
+                                                    variant="outline"
+                                                    disabled={isAnyTaskInProgress}
+                                                    className={`w-full ${isAnyTaskInProgress ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+                                                        }`}
+                                                >
+                                                    Edit Manually
+                                                </Button>
+                                                <Button
+                                                    onClick={() => onDiscussPrompt(finding)}
+                                                    size="sm"
+                                                    variant="outline"
+                                                    disabled={isAnyTaskInProgress}
+                                                    className={`w-full ${isAnyTaskInProgress ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+                                                        }`}
+                                                >
+                                                    Discuss & Improve
+                                                </Button>
+                                            </>
                                         )}
-                                    </Button>
+                                    </div>
                                 </td>
+
                             </tr>
                         );
                     })}
@@ -613,100 +538,200 @@ function FindingsTable({
     );
 }
 
-function FindingDetailsDialog({
+function EditFindingDialog({
     open,
     finding,
     onClose,
-    onFix,
-    fixingFindingKey,
+    onSave,
 }: {
     open: boolean;
-    finding: SecurityFinding | null;
+    finding: GuidedBuildFinding | null;
     onClose: (open: boolean) => void;
-    onFix: (finding: SecurityFinding) => void;
-    fixingFindingKey?: string | null;
+    onSave: (updatedFinding: GuidedBuildFinding) => void;
 }) {
+    const [title, setTitle] = useState("");
+    const [description, setDescription] = useState("");
+
+    // Sync state when a new finding is selected
+    useEffect(() => {
+        if (finding) {
+            setTitle(finding.title);
+            setDescription(finding.description);
+        }
+    }, [finding]);
+
+    const handleSave = () => {
+        if (finding) {
+            onSave({ ...finding, title, description });
+            onClose(false);
+        }
+    };
+
     return (
         <Dialog open={open} onOpenChange={onClose}>
-            <DialogContent className="sm:max-w-[80vw] md:max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="sm:max-w-[80vw] md:max-w-4xl max-h-[90vh] flex flex-col">
                 <DialogHeader>
-                    <DialogTitle className="flex items-center justify-between gap-3 pr-4">
-                        <span className="truncate">{finding?.title}</span>
+                    <DialogTitle className="flex items-center gap-3 pr-4">
+                        Edit Task Prompt
                         {finding && <StatusBadge status={finding.level} />}
                     </DialogTitle>
                 </DialogHeader>
-                <div className="text-sm text-gray-700 dark:text-gray-300 prose prose-sm dark:prose-invert max-w-none break-words max-h-[60vh] overflow-auto">
-                    {finding && <VanillaMarkdownParser content={finding.description} />}
+                <div className="flex flex-col gap-4 py-4 overflow-y-auto">
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Title</label>
+                        <input
+                            className="w-full rounded-md border border-gray-300 dark:border-gray-700 bg-transparent p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                        />
+                    </div>
+                    <div className="space-y-2 flex-grow">
+                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Description / Prompt</label>
+                        <textarea
+                            className="w-full h-64 rounded-md border border-gray-300 dark:border-gray-700 bg-transparent p-3 font-mono text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
+                        />
+                    </div>
                 </div>
                 <DialogFooter>
-                    <Button
-                        onClick={() => {
-                            if (finding) {
-                                onFix(finding);
-                                onClose(false);
-                            }
-                        }}
-                        disabled={
-                            finding ? fixingFindingKey === createFindingKey(finding) : false
-                        }
-                    >
-                        {finding && fixingFindingKey === createFindingKey(finding) ? (
-                            <>
-                                <svg
-                                    className="w-4 h-4 animate-spin mr-2"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <circle
-                                        className="opacity-25"
-                                        cx="12"
-                                        cy="12"
-                                        r="10"
-                                        stroke="currentColor"
-                                        strokeWidth="4"
-                                    />
-                                    <path
-                                        className="opacity-75"
-                                        fill="currentColor"
-                                        d="m4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 0 1 4 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                    />
-                                </svg>
-                                Building Feature...
-                            </>
-                        ) : (
-                            <>Build This</>
-                        )}
-                    </Button>
                     <DialogClose asChild>
-                        <Button variant="outline">Close</Button>
+                        <Button variant="outline">Cancel</Button>
                     </DialogClose>
+                    <Button onClick={handleSave}>Save Edits</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
     );
 }
 
-export const AutoBuildPanel = () => {
+export const GuidedBuildTab = () => {
     const selectedAppId = useAtomValue(selectedAppIdAtom);
     const setSelectedChatId = useSetAtom(selectedChatIdAtom);
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const { streamMessage } = useStreamChat({ hasChatId: false });
-    // Using useSecurityReview hook but interpreting the data as AutoBuild data
-    const { data, isLoading, error, refetch } = useAutoBuild(selectedAppId);
+    const { data, isLoading, error, refetch } = useGuidedBuild(selectedAppId);
+
+    // Force a fresh DB pull every time this tab is opened!
+    useEffect(() => {
+        refetch();
+    }, [refetch]);
+
     const [isRunningReview, setIsRunningReview] = useState(false);
     const [detailsOpen, setDetailsOpen] = useState(false);
-    const [detailsFinding, setDetailsFinding] = useState<SecurityFinding | null>(
+    const [detailsFinding, setDetailsFinding] = useState<GuidedBuildFinding | null>(
         null,
     );
     const [isEditDesignOpen, setIsEditDesignOpen] = useState(false);
     const [designContent, setDesignContent] = useState("");
     const [fixingFindingKey, setFixingFindingKey] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
-    const [selectedFindings, setSelectedFindings] = useState<Set<string>>(
-        new Set(),
-    );
-    const [isFixingSelected, setIsFixingSelected] = useState(false);
+    const [completedFindings, setCompletedFindings] = useState<Set<string>>(new Set());
+    const [editModalOpen, setEditModalOpen] = useState(false);
+    const [editingFinding, setEditingFinding] = useState<GuidedBuildFinding | null>(null);
+    const [editedFindings, setEditedFindings] = useState<Record<string, GuidedBuildFinding>>({});
+
+    // Derive merged findings by overriding raw data with local edits
+    const activeFindings = data?.findings.map(finding => {
+        const key = createFindingKey(finding);
+        return editedFindings[key] || finding;
+    }) || [];
+
+    const handleEditManually = (finding: GuidedBuildFinding) => {
+        setEditingFinding(finding);
+        setEditModalOpen(true);
+    };
+
+    const handleSaveFindingEdit = async (updatedFinding: GuidedBuildFinding) => {
+        if (!selectedAppId || !editingFinding) return;
+
+        try {
+            // Keep UI responsive by optimistically updating local state first
+            const originalKey = createFindingKey(editingFinding);
+            setEditedFindings(prev => ({
+                ...prev,
+                [originalKey]: updatedFinding
+            }));
+
+            // Push the permanent edit to the SQLite database
+            await IpcClient.getInstance().updateGuidedBuildFinding(
+                selectedAppId,
+                editingFinding.title, // Use the original title to find it in the regex
+                updatedFinding
+            );
+
+            // Refetch to ensure the UI is perfectly synced with the database
+            refetch();
+        } catch (err) {
+            showError(`Failed to save edit to database: ${err}`);
+        }
+    };
+
+    const handleDiscussPrompt = async (finding: GuidedBuildFinding) => {
+        if (!selectedAppId) return;
+        try {
+            // No need to lock or unlock here, only when the edit is done then we can automatically build this prompt
+            // Todo: rename the chat to # Discuss Tasklist Prompt, such that when it is done here, then the VDA knows how to update
+            const chatId = await IpcClient.getInstance().createChat(selectedAppId);
+            setSelectedChatId(chatId);
+            await navigate({ to: "/chat", search: { id: chatId } });
+
+            const prompt = `I want to discuss this feature gap from the Guided Tasklist before building it:
+
+                            **${finding.title}**
+                            ${finding.description}
+
+                            Can we review the requirements and approach?`;
+
+            await streamMessage({ prompt, chatId });
+        } catch (err) {
+            showError(`Failed to create discussion chat: ${err}`);
+        }
+    };
+
+    const handleTestCompletion = async (finding: GuidedBuildFinding) => {
+        if (!selectedAppId) return;
+        try {
+            // 1. Lock
+            await IpcClient.getInstance().updateGuidedBuildFinding(selectedAppId, finding.title, { ...finding, isInProgress: true });
+            await refetch();
+
+            const chatId = await IpcClient.getInstance().createChat(selectedAppId);
+
+            // 2. Set verification title prefix
+            await IpcClient.getInstance().updateChat({
+                chatId,
+                title: `${GUIDED_VERIFICATION_TITLE_PREFIX}${finding.title}`
+            });
+
+            setSelectedChatId(chatId);
+            await navigate({ to: "/chat", search: { id: chatId } });
+
+            const prompt = `I have completed building the following feature:
+                            **${finding.title}**
+
+                            Please review the codebase and test it to verify that this gap is fully resolved based on our Design Semantics and the codebase.`;
+
+            await streamMessage({
+                prompt,
+                chatId,
+                // onSettled: async () => {
+                //     // Flip the isVerified flag to true in the DB
+                //     await IpcClient.getInstance().updateGuidedBuildFinding(
+                //         selectedAppId,
+                //         finding.title,
+                //         { ...finding, isVerified: true, isInProgress: false }
+                //     );
+                //     refetch();
+                // },
+            });
+        } catch (err) {
+            showError(`Failed to create test chat: ${err}`);
+            await IpcClient.getInstance().updateGuidedBuildFinding(selectedAppId, finding.title, { ...finding, isInProgress: false });
+            refetch();
+        }
+    };
 
     // Load DESIGN_SEMANTIC.md instead of SECURITY_RULES.md
     const {
@@ -726,7 +751,7 @@ export const AutoBuildPanel = () => {
 
     // Clear selections when data changes
     useEffect(() => {
-        setSelectedFindings(new Set());
+        setCompletedFindings(new Set());
     }, [data]);
 
     const handleSaveDesign = async () => {
@@ -760,12 +785,12 @@ export const AutoBuildPanel = () => {
         }
     };
 
-    const openFindingDetails = (finding: SecurityFinding) => {
+    const openFindingDetails = (finding: GuidedBuildFinding) => {
         setDetailsFinding(finding);
         setDetailsOpen(true);
     };
 
-    const handleRunAutoBuild = async () => {
+    const handleRunGuidedBuild = async () => {
         if (!selectedAppId) {
             showError("No app selected");
             return;
@@ -779,38 +804,46 @@ export const AutoBuildPanel = () => {
             // Rename the new chat to 
             await IpcClient.getInstance().updateChat({
                 chatId: chatId,
-                title: `${AUTO_BUILD_TITLE_PREFIX}`,
+                title: `${GUIDED_BUILD_TITLE_PREFIX}`,
             });
             // Navigate to the new chat
             setSelectedChatId(chatId);
             await navigate({ to: "/chat", search: { id: chatId } });
 
-            // Stream the auto-build prompt (maps to CONTINUE_USING_DESIGN_SEMANTIC in backend)
+            // Stream the guided-build prompt (maps to CONTINUE_USING_DESIGN_SEMANTIC in backend)
             await streamMessage({
-                prompt: "/auto-build",
+                prompt: "/guided-build",
                 chatId,
                 onSettled: () => {
                     refetch(); // Refetch findings
                     setIsRunningReview(false);
+                    setCompletedFindings(new Set());
                 },
             });
         } catch (err) {
-            showError(`Failed to run auto build analysis: ${err}`);
+            showError(`Failed to run generate tasklist: ${err}`);
             setIsRunningReview(false);
         }
     };
 
-    const handleBuildFeature = async (finding: SecurityFinding) => {
+    const handleBuildFeature = async (finding: GuidedBuildFinding) => {
         if (!selectedAppId) {
             showError("No app selected");
             return;
         }
 
         try {
-            const key = createFindingKey(finding);
-            setFixingFindingKey(key);
+            // 1. Lock the finding in the database
+            await IpcClient.getInstance().updateGuidedBuildFinding(selectedAppId, finding.title, { ...finding, isInProgress: true });
+            await refetch();
 
             const chatId = await IpcClient.getInstance().createChat(selectedAppId);
+
+            // 2. Set the strict title prefix so the Chat UI knows what mode it is in
+            await IpcClient.getInstance().updateChat({
+                chatId,
+                title: `${GUIDED_BUILD_TASK_TITLE_PREFIX}${finding.title}`
+            });
 
             // Navigate to the new chat
             setSelectedChatId(chatId);
@@ -818,96 +851,38 @@ export const AutoBuildPanel = () => {
 
             // Extract the tasks from the description (assuming the backend puts <dyad-tasks> inside description)
             // or construct a generic prompt if not explicit.
-            const prompt = `I am ready to implement this feature gap identified in the Auto Build analysis:
+            const prompt = `I am ready to implement this feature gap identified in the Guided Tasklist:
 
-**${finding.title}** (${finding.level})
+                            **${finding.title}** (${finding.level})
 
-${finding.description}
+                            ${finding.description}
 
-Please implement the tasks defined above.`;
-
-            await streamMessage({
-                prompt,
-                chatId,
-                onSettled: () => {
-                    setFixingFindingKey(null);
-                },
-            });
-        } catch (err) {
-            showError(`Failed to create build chat: ${err}`);
-            setFixingFindingKey(null);
-        }
-    };
-
-    const handleToggleSelection = (findingKey: string) => {
-        setSelectedFindings((prev) => {
-            const newSet = new Set(prev);
-            if (newSet.has(findingKey)) {
-                newSet.delete(findingKey);
-            } else {
-                newSet.add(findingKey);
-            }
-            return newSet;
-        });
-    };
-
-    const handleToggleSelectAll = () => {
-        if (!data?.findings) return;
-
-        const sortedFindings = [...data.findings].sort(
-            (a, b) => getStatusOrder(a.level) - getStatusOrder(b.level),
-        );
-
-        const allKeys = sortedFindings.map((finding) => createFindingKey(finding));
-        const allSelected = allKeys.every((key) => selectedFindings.has(key));
-
-        if (allSelected) {
-            setSelectedFindings(new Set());
-        } else {
-            setSelectedFindings(new Set(allKeys));
-        }
-    };
-
-    const handleBuildSelected = async () => {
-        if (!selectedAppId || selectedFindings.size === 0 || !data?.findings) {
-            showError("No tasks selected");
-            return;
-        }
-
-        try {
-            setIsFixingSelected(true);
-
-            const findingsToBuild = data.findings.filter((finding) =>
-                selectedFindings.has(createFindingKey(finding)),
-            );
-
-            const chatId = await IpcClient.getInstance().createChat(selectedAppId);
-
-            setSelectedChatId(chatId);
-            await navigate({ to: "/chat", search: { id: chatId } });
-
-            const issuesList = findingsToBuild
-                .map(
-                    (finding, index) =>
-                        `${index + 1}. **${finding.title}** (${finding.level})\n${finding.description}`,
-                )
-                .join("\n\n");
-
-            const prompt = `Please implement the following ${findingsToBuild.length} feature gap${findingsToBuild.length !== 1 ? "s" : ""} identified in the Auto Build analysis:
-
-${issuesList}`;
+                            Please implement the tasks defined above.`;
 
             await streamMessage({
                 prompt,
                 chatId,
-                onSettled: () => {
-                    setIsFixingSelected(false);
-                    setSelectedFindings(new Set());
-                },
+                // onSettled: async () => {
+                //     // Mark this specific finding as completed
+                //     // setCompletedFindings((prev) => {
+                //     //     const newSet = new Set(prev);
+                //     //     newSet.add(key);
+                //     //     return newSet;
+                //     // });
+                //     // Flip the isBuilt flag to true in the DB
+                //     await IpcClient.getInstance().updateGuidedBuildFinding(
+                //         selectedAppId,
+                //         finding.title,
+                //         { ...finding, isBuilt: true, isInProgress: false }
+                //     );
+                //     refetch(); // Pull the fresh DB state so the UI swaps the buttons
+                // },
             });
         } catch (err) {
             showError(`Failed to create build chat: ${err}`);
-            setIsFixingSelected(false);
+            // Fallback unlock if it crashes before stream starts
+            await IpcClient.getInstance().updateGuidedBuildFinding(selectedAppId, finding.title, { ...finding, isInProgress: false });
+            refetch();
         }
     };
 
@@ -922,19 +897,17 @@ ${issuesList}`;
     return (
         <div className="flex flex-col h-full overflow-y-auto">
             <div className="p-4 pt-0 space-y-4">
-                <AutoBuildHeader
+                <GuidedBuildHeader
                     isRunning={isRunningReview}
-                    onRun={handleRunAutoBuild}
+                    onRun={handleRunGuidedBuild}
                     data={data}
+                    hasFindings={activeFindings.length > 0}
                     onOpenEditDesign={() => {
                         setIsEditDesignOpen(true);
                         if (selectedAppId) {
                             refetchDesign();
                         }
                     }}
-                    selectedCount={selectedFindings.size}
-                    onFixSelected={handleBuildSelected}
-                    isFixingSelected={isFixingSelected}
                 />
 
                 {isRunningReview ? (
@@ -942,27 +915,25 @@ ${issuesList}`;
                 ) : error ? (
                     <NoReviewCard
                         isRunning={isRunningReview}
-                        onRun={handleRunAutoBuild}
+                        onRun={handleRunGuidedBuild}
                     />
                 ) : data && data.findings.length > 0 ? (
                     <FindingsTable
-                        findings={data.findings}
-                        onOpenDetails={openFindingDetails}
+                        findings={activeFindings}
+                        onEditManually={handleEditManually}
+                        onDiscussPrompt={handleDiscussPrompt}
+                        onTestCompletion={handleTestCompletion}
                         onFix={handleBuildFeature}
                         fixingFindingKey={fixingFindingKey}
-                        selectedFindings={selectedFindings}
-                        onToggleSelection={handleToggleSelection}
-                        onToggleSelectAll={handleToggleSelectAll}
                     />
                 ) : (
                     <AllClearCard data={data} />
                 )}
-                <FindingDetailsDialog
-                    open={detailsOpen}
-                    finding={detailsFinding}
-                    onClose={setDetailsOpen}
-                    onFix={handleBuildFeature}
-                    fixingFindingKey={fixingFindingKey}
+                <EditFindingDialog
+                    open={editModalOpen}
+                    finding={editingFinding}
+                    onClose={setEditModalOpen}
+                    onSave={handleSaveFindingEdit}
                 />
                 <Dialog open={isEditDesignOpen} onOpenChange={setIsEditDesignOpen}>
                     <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
@@ -971,7 +942,7 @@ ${issuesList}`;
                         </DialogHeader>
                         <div className="text-sm text-gray-600 dark:text-gray-400">
                             This defines the core requirements and invariants for your application.
-                            Changes here will affect future Auto Build analyses. Saved to{" "}
+                            Changes here will affect future Guided Build analyses. Saved to{" "}
                             <code className="text-xs">DESIGN_SEMANTIC.md</code>.
                         </div>
                         <div className="mt-3">

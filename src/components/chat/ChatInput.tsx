@@ -20,6 +20,7 @@ import {
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSettings } from "@/hooks/useSettings";
 import { IpcClient } from "@/ipc/ipc_client";
 import {
@@ -31,7 +32,7 @@ import {
 } from "@/atoms/chatAtoms";
 import { atom, useAtom, useSetAtom, useAtomValue } from "jotai";
 import { useStreamChat } from "@/hooks/useStreamChat";
-import { selectedAppIdAtom } from "@/atoms/appAtoms";
+import { selectedAppIdAtom, previewModeAtom } from "@/atoms/appAtoms";
 import { Button } from "@/components/ui/button";
 import { useProposal } from "@/hooks/useProposal";
 import {
@@ -54,7 +55,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "../ui/tooltip";
-import {DESIGN_BUILD_TITLE_PREFIX, 
+import {
+  DESIGN_BUILD_TITLE_PREFIX,
   PROMPT_IMPROVEMENT_TITLE_PREFIX,
   improvePromptInNewChat
 } from "@/components/chat/DesignInNewChat"
@@ -77,6 +79,9 @@ import { LexicalChatInput } from "./LexicalChatInput";
 import { useChatModeToggle } from "@/hooks/useChatModeToggle";
 
 const showTokenBarAtom = atom(false);
+
+export const GUIDED_BUILD_TASK_TITLE_PREFIX = "# Guided Build Task: ";
+export const GUIDED_VERIFICATION_TITLE_PREFIX = "# Guided Verification: ";
 
 export function ChatInput({ chatId }: { chatId?: number }) {
   const posthog = usePostHog();
@@ -166,19 +171,19 @@ export function ChatInput({ chatId }: { chatId?: number }) {
 
     // Check if must handleImprove Prompt
 
-    if (settings?.selectedChatMode === "guided") {
+    if (settings?.selectedChatMode === "improve_prompt") {
       const currentChat = chats.find(c => c.id === chatId);
       const title = currentChat?.title || "";
-      
-      // If we are NOT already in a special guided session
+
+      // If we are NOT already in a special improve_prompt session
       const isSpecialSession = title.startsWith(DESIGN_BUILD_TITLE_PREFIX) || title.startsWith(PROMPT_IMPROVEMENT_TITLE_PREFIX);
-      
+
       if (!isSpecialSession) {
         setInputValue(""); // Clear input
-        
+
         // Pass the input to the new chat handler
         await handlePromptImprovement(currentInput);
-        return; 
+        return;
       }
     }
 
@@ -310,13 +315,13 @@ export function ChatInput({ chatId }: { chatId?: number }) {
       )}
       <div className="p-4" data-testid="chat-input-container">
         <div
-          className={`relative flex flex-col border border-border rounded-lg bg-(--background-lighter) shadow-sm ${
-            isDraggingOver ? "ring-2 ring-blue-500 border-blue-500" : ""
-          }`}
+          className={`relative flex flex-col border border-border rounded-lg bg-(--background-lighter) shadow-sm ${isDraggingOver ? "ring-2 ring-blue-500 border-blue-500" : ""
+            }`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
+          {chatId && <ActiveTaskBanner chatId={chatId} />}
           {/* Only render ChatInputActions if proposal is loaded */}
           {proposal &&
             proposalResult?.chatId === chatId &&
@@ -398,9 +403,8 @@ export function ChatInput({ chatId }: { chatId?: number }) {
                   <Button
                     onClick={() => setShowTokenBar(!showTokenBar)}
                     variant="ghost"
-                    className={`has-[>svg]:px-2 ${
-                      showTokenBar ? "text-purple-500 bg-purple-100" : ""
-                    }`}
+                    className={`has-[>svg]:px-2 ${showTokenBar ? "text-purple-500 bg-purple-100" : ""
+                      }`}
                     size="sm"
                     data-testid="token-bar-toggle"
                   >
@@ -602,7 +606,7 @@ function DoneButton() {
   const [navigationStack, setNavigationStack] = useAtom(chatNavigationStackAtom);
   const messagesById = useAtomValue(chatMessagesByIdAtom); // Need this to find the improved prompt
   const navigate = useNavigate();
-  
+
   const onClick = async () => {
     if (!chatId) {
       console.error("No chat id found");
@@ -613,23 +617,6 @@ function DoneButton() {
       // Fetch the chat to check its title
       const chat = await IpcClient.getInstance().getChat(chatId);
       const title = chat.title || "";
-      
-      // let prompt = "";
-
-      // Logic: Check title to determine intent
-      // We use .includes() to handle variations like "# Design Semantic File" 
-      // or the "Design Semantic Build Together" title we generated earlier.
-      // if (title.includes("Design Semantic")) {
-      //   prompt = "I am done. Please compile the DESIGN_SEMANTIC.md file now.";
-      // } else if (title.includes("Prompt Improvement")) {
-      //   prompt = "I am done. Let's choose this as the final prompt now";
-      // }
-
-      // streamMessage({
-      //   prompt,
-      //   chatId,
-      //   redo: false,
-      // });
 
       // 1. Handle Prompt Improvement Completion
       if (title.startsWith(PROMPT_IMPROVEMENT_TITLE_PREFIX)) {
@@ -643,22 +630,22 @@ function DoneButton() {
         const improvedPromptMatch = lastImprovedMessage?.content.match(
           /<dyad-improved-prompt>([\s\S]*?)<\/dyad-improved-prompt>/
         );
-        
+
         const finalPrompt = improvedPromptMatch ? improvedPromptMatch[1].trim() : null;
 
         if (finalPrompt && navigationStack.length > 0) {
           // Get original chat ID
           const originalChatId = navigationStack[navigationStack.length - 1];
-          
+
           // Pop stack
           setNavigationStack((prev) => prev.slice(0, -1));
-          
+
           // Switch to Build mode
           updateSettings({ selectedChatMode: "build" });
 
           // Navigate and RUN the prompt
           navigate({ to: "/chat", search: { id: originalChatId } });
-          
+
           // Small timeout to allow navigation to settle before streaming
           setTimeout(() => {
             streamMessage({
@@ -670,24 +657,13 @@ function DoneButton() {
           return; // Exit early since we handled the flow
         }
       }
-
-      // // 2. Handle Design Semantic Completion (Original Logic)
-      // let prompt = "I am done. Please compile the DESIGN_SEMANTIC.md file now.";
-      
-      // // Standard flow for Design Semantics (just finish in current chat)
-      // streamMessage({
-      //   prompt,
-      //   chatId,
-      //   redo: false,
-      // });
-
       // Navigate back if needed
 
       // POP FROM STACK: Check if we have a history to return to
       if (navigationStack.length > 0) {
         // Get the last ID
         const previousChatId = navigationStack[navigationStack.length - 1];
-        
+
         // Remove it from the stack
         setNavigationStack((prev) => prev.slice(0, -1));
 
@@ -696,7 +672,7 @@ function DoneButton() {
 
         // Navigate back
         setTimeout(() => {
-           navigate({ to: "/chat", search: { id: previousChatId } });
+          navigate({ to: "/chat", search: { id: previousChatId } });
         }, 100);
       }
     } catch (error) {
@@ -705,12 +681,174 @@ function DoneButton() {
   };
 
   return (
-    <SuggestionButton 
-      onClick={onClick} 
+    <SuggestionButton
+      onClick={onClick}
       tooltipText="Finish the interview, and generate the result"
     >
       <Check size={16} className="mr-2" />
       Done
+    </SuggestionButton>
+  );
+}
+
+function DoneBuildingButton({ 
+  findingTitle, 
+  onSuccess 
+}: { 
+  findingTitle: string; 
+  onSuccess: () => void; 
+}) {
+  const appId = useAtomValue(selectedAppIdAtom);
+  const setPreviewMode = useSetAtom(previewModeAtom);
+  const setIsPreviewOpen = useSetAtom(isPreviewOpenAtom);
+  const queryClient = useQueryClient();
+
+  const onClick = async () => {
+    if (!appId) return;
+    try {
+      const ipcClient = IpcClient.getInstance();
+
+      // 1. Fetch the full existing finding
+      const data = await ipcClient.getLatestGuidedBuild(appId);
+      const finding = data.findings.find((f: any) => f.title === findingTitle);
+
+      if (finding) {
+        // 2. Update the DB flags
+        await ipcClient.updateGuidedBuildFinding(appId, findingTitle, {
+          ...finding,
+          isBuilt: true,
+          isInProgress: false
+        });
+      }
+
+      // 3. Immediately hide the banner
+      onSuccess();
+      
+      // 4. Force Guided Build data refresh
+      await queryClient.invalidateQueries();
+
+      // 5. Open the Guided Build panel
+      setPreviewMode("guided-build");
+      setIsPreviewOpen(true);
+
+    } catch (error) {
+      console.error("Error completing build task:", error);
+    }
+  };
+
+  return (
+    <SuggestionButton onClick={onClick} tooltipText="Mark this task as built and return to Guided Build">
+      <Check size={16} className="mr-2" />
+      Done Building
+    </SuggestionButton>
+  );
+}
+
+function ConcludeVerificationButton({ 
+  findingTitle, 
+  onSuccess 
+}: { 
+  findingTitle: string; 
+  onSuccess: () => void; 
+}) {
+  const appId = useAtomValue(selectedAppIdAtom);
+  const chatId = useAtomValue(selectedChatIdAtom);
+  const messagesById = useAtomValue(chatMessagesByIdAtom);
+  const setPreviewMode = useSetAtom(previewModeAtom);
+  const setIsPreviewOpen = useSetAtom(isPreviewOpenAtom);
+  const queryClient = useQueryClient();
+
+  const onClick = async () => {
+    if (!appId || !chatId) return;
+    try {
+      const ipcClient = IpcClient.getInstance();
+
+      const data = await ipcClient.getLatestGuidedBuild(appId);
+      const finding = data.findings.find((f: any) => f.title === findingTitle);
+
+      if (finding) {
+        const messages = messagesById.get(chatId) || [];
+        const fullAssistantText = messages.filter(m => m.role === "assistant").map(m => m.content).join("\n");
+
+        const isVerified = fullAssistantText.includes("<dyad-verify-build>true</dyad-verify-build>");
+        let updatedFinding = { ...finding, isVerified, isBuilt: isVerified, isInProgress: false };
+
+        if (!isVerified) {
+          const regex = /<dyad-re-gap-analysis\s+title="([^"]+)"\s+status="(missing|partial|violation)">([\s\S]*?)<\/dyad-re-gap-analysis>/i;
+          const match = fullAssistantText.match(regex);
+          if (match) {
+            updatedFinding.title = match[1].trim();
+            updatedFinding.level = match[2] as any;
+            updatedFinding.description = match[3].replace(/<dyad-tasks>/g, "\n\n**Actionable Tasks:**\n").replace(/<\/dyad-tasks>/g, "").trim();
+          }
+          console.log("Task failed verification. New tasks have been added.");
+        } else {
+          console.log("Task Verified Successfully!");
+        }
+
+        await ipcClient.updateGuidedBuildFinding(appId, findingTitle, updatedFinding);
+      }
+
+      onSuccess();
+      await queryClient.invalidateQueries();
+
+      setPreviewMode("guided-build");
+      setIsPreviewOpen(true);
+
+    } catch (error) {
+      console.error("Error evaluating verification:", error);
+    }
+  };
+
+  return (
+    <SuggestionButton onClick={onClick} tooltipText="Evaluate AI verification and return to Guided Build">
+      <Check size={16} className="mr-2" />
+      Conclude Verification
+    </SuggestionButton>
+  );
+}
+
+function CancelGuidedBuildButton({ 
+  findingTitle, 
+  onSuccess 
+}: { 
+  findingTitle: string; 
+  onSuccess: () => void; 
+}) {
+  const appId = useAtomValue(selectedAppIdAtom);
+  const setPreviewMode = useSetAtom(previewModeAtom);
+  const setIsPreviewOpen = useSetAtom(isPreviewOpenAtom);
+  const queryClient = useQueryClient();
+
+  const onClick = async () => {
+    if (!appId) return;
+    try {
+      const ipcClient = IpcClient.getInstance();
+
+      const data = await ipcClient.getLatestGuidedBuild(appId);
+      const finding = data.findings.find((f: any) => f.title === findingTitle);
+
+      if (finding) {
+        await ipcClient.updateGuidedBuildFinding(appId, findingTitle, {
+          ...finding,
+          isInProgress: false
+        });
+      }
+
+      onSuccess();
+      await queryClient.invalidateQueries();
+
+      setPreviewMode("guided-build");
+      setIsPreviewOpen(true);
+    } catch (error) {
+      console.error("Error canceling task:", error);
+    }
+  };
+
+  return (
+    <SuggestionButton onClick={onClick} tooltipText="Cancel this process and unlock the task">
+      <X size={16} className="mr-2" />
+      Cancel
     </SuggestionButton>
   );
 }
@@ -742,25 +880,115 @@ export function mapActionToButton(action: SuggestedAction) {
 }
 
 function ActionProposalActions({ proposal }: { proposal: ActionProposal }) {
-  // Use atoms to get the current chat title
-  const chats = useAtomValue(chatsAtom);
-  const selectedChatId = useAtomValue(selectedChatIdAtom);
-  
-  const currentChat = chats.find((c) => c.id === selectedChatId);
-  const title = currentChat?.title || "";
-
-  // Check if title starts with the specific prefixes
-  const showDoneButton = 
-    title.startsWith(DESIGN_BUILD_TITLE_PREFIX) || 
-    title.startsWith(PROMPT_IMPROVEMENT_TITLE_PREFIX);
-
   return (
     <div className="border-b border-border p-2 pb-0 flex items-center justify-between">
       <div className="flex items-center space-x-2 overflow-x-auto pb-2">
         {proposal.actions.map((action) => mapActionToButton(action))}
+      </div>
+    </div>
+  );
+}
 
-        {/* Conditionally render DoneButton based on title */}
-        {showDoneButton && <DoneButton />}
+function ActiveTaskBanner({ chatId }: { chatId: number }) {
+  const appId = useAtomValue(selectedAppIdAtom);
+  
+  const [bannerData, setBannerData] = useState<{ 
+    mode: 'build' | 'verify' | 'interactive', 
+    findingTitle: string 
+  } | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const initBannerStatus = async () => {
+      // FIX: Add a tiny delay to prevent an IPC race condition with the AI Stream startup
+      // This stops the backend "Ghost Lock" logic from accidentally wiping the lock!
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      try {
+        const ipcClient = IpcClient.getInstance();
+        const chat = await ipcClient.getChat(chatId);
+        const title = chat.title || "";
+        
+        console.log("[Banner] Chat Title:", title);
+
+        const isBuild = title.startsWith(GUIDED_BUILD_TASK_TITLE_PREFIX);
+        const isVerify = title.startsWith(GUIDED_VERIFICATION_TITLE_PREFIX);
+        const isInteractive = title.startsWith(DESIGN_BUILD_TITLE_PREFIX) || title.startsWith(PROMPT_IMPROVEMENT_TITLE_PREFIX);
+
+        if (!isBuild && !isVerify && !isInteractive) {
+          if (mounted) setBannerData(null);
+          return;
+        }
+
+        if (isInteractive) {
+          if (mounted) setBannerData({ mode: 'interactive', findingTitle: '' });
+          return;
+        }
+
+        const findingTitle = isBuild 
+          ? title.replace(GUIDED_BUILD_TASK_TITLE_PREFIX, "").trim() 
+          : title.replace(GUIDED_VERIFICATION_TITLE_PREFIX, "").trim();
+
+        console.log("[Banner] Extracted Finding Title:", findingTitle);
+
+        if (appId) {
+          const data = await ipcClient.getLatestGuidedBuild(appId);
+          const finding = data.findings.find((f: any) => f.title === findingTitle);
+
+          console.log("[Banner] Found in DB:", finding);
+
+          // If we found it, and it's in progress, show the banner!
+          // Fallback: If it's technically NOT in progress, but it also hasn't been built/verified yet, 
+          // we optimistically show it anyway just in case the DB failed to save the lock.
+          if (finding) {
+            const shouldShow = finding.isInProgress || (!finding.isBuilt && !finding.isVerified);
+            
+            if (shouldShow) {
+              if (mounted) {
+                setBannerData({ 
+                  mode: isBuild ? 'build' : 'verify', 
+                  findingTitle 
+                });
+              }
+            } else {
+              if (mounted) setBannerData(null);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Failed to initialize ActiveTaskBanner:", error);
+      }
+    };
+
+    initBannerStatus();
+
+    return () => {
+      mounted = false;
+    };
+  }, [chatId, appId]);
+
+  if (!bannerData) return null;
+
+  return (
+    <div className="border-b border-border bg-blue-50/50 dark:bg-blue-900/20 p-2.5 flex items-center justify-between rounded-t-lg">
+      <div className="text-sm font-semibold text-blue-800 dark:text-blue-300 ml-1">
+        {bannerData.mode === 'build' && `Building: ${bannerData.findingTitle}`}
+        {bannerData.mode === 'verify' && `Verifying: ${bannerData.findingTitle}`}
+        {bannerData.mode === 'interactive' && `Interactive Design Session`}
+      </div>
+      <div className="flex items-center space-x-2">
+        {bannerData.mode === 'interactive' && <DoneButton />}
+        
+        {bannerData.mode === 'build' && (
+          <DoneBuildingButton findingTitle={bannerData.findingTitle} onSuccess={() => setBannerData(null)} />
+        )}
+        {bannerData.mode === 'verify' && (
+          <ConcludeVerificationButton findingTitle={bannerData.findingTitle} onSuccess={() => setBannerData(null)} />
+        )}
+        {(bannerData.mode === 'build' || bannerData.mode === 'verify') && (
+          <CancelGuidedBuildButton findingTitle={bannerData.findingTitle} onSuccess={() => setBannerData(null)} />
+        )}
       </div>
     </div>
   );
@@ -1047,24 +1275,21 @@ function ProposalSummary({
 
   if (sqlQueries.length) {
     parts.push(
-      `${sqlQueries.length} SQL ${
-        sqlQueries.length === 1 ? "query" : "queries"
+      `${sqlQueries.length} SQL ${sqlQueries.length === 1 ? "query" : "queries"
       }`,
     );
   }
 
   if (serverFunctions.length) {
     parts.push(
-      `${serverFunctions.length} Server ${
-        serverFunctions.length === 1 ? "Function" : "Functions"
+      `${serverFunctions.length} Server ${serverFunctions.length === 1 ? "Function" : "Functions"
       }`,
     );
   }
 
   if (packagesAdded.length) {
     parts.push(
-      `${packagesAdded.length} ${
-        packagesAdded.length === 1 ? "package" : "packages"
+      `${packagesAdded.length} ${packagesAdded.length === 1 ? "package" : "packages"
       }`,
     );
   }

@@ -15,6 +15,7 @@ import {
   DESIGN_SEMANTIC_INFER_PROMPT,
   DESIGN_SEMANTIC_INTERACTIVE_BUILD_PROMPT,
   design_improvement_prompt,
+  guided_verification_prompt,
   gap_analysis_with_design_semantic_prompt,
 } from "../../prompts/design_prompt";
 import { db } from "../../db";
@@ -94,13 +95,17 @@ import {
   VersionedFiles as VersionedFiles,
 } from "../utils/versioned_codebase_context";
 import { DESIGN_BUILD_TITLE_PREFIX, INFER_DESIGN_SEMANTIC_USER_MESSAGE, PROMPT_IMPROVEMENT_TITLE_PREFIX } from "@/components/chat/DesignInNewChat";
+import { 
+    GUIDED_BUILD_TASK_TITLE_PREFIX, 
+    GUIDED_VERIFICATION_TITLE_PREFIX 
+} from "@/components/chat/ChatInput";
 
 type AsyncIterableStream<T> = AsyncIterable<T> & ReadableStream<T>;
 
 const logger = log.scope("chat_stream_handlers");
 
 // Track active streams for cancellation
-const activeStreams = new Map<number, AbortController>();
+export const activeStreams = new Map<number, AbortController>();
 
 // Track partial responses for cancelled streams
 const partialResponses = new Map<number, string>();
@@ -725,14 +730,22 @@ ${componentSnippet}
           isCodebaseNeeded = true;
         }
 
+        const guidedVerificationIntent = chatTitle.startsWith(GUIDED_VERIFICATION_TITLE_PREFIX)
+        if (guidedVerificationIntent){
+          systemPrompt = guided_verification_prompt(
+            designSemanticFileContent,
+          );
+          isCodebaseNeeded = true;
+        }
+
         const inferDesignSemanticIntent = req.prompt === INFER_DESIGN_SEMANTIC_USER_MESSAGE
         if (inferDesignSemanticIntent) {
           systemPrompt = DESIGN_SEMANTIC_INFER_PROMPT;
           isCodebaseNeeded = true;
         }
 
-        const isAutoBuildIntent = req.prompt.startsWith("/auto-build");
-        if (isAutoBuildIntent) {
+        const isGuidedBuildIntent = req.prompt.startsWith("/guided-build");
+        if (isGuidedBuildIntent) {
           // Use the Gap Analysis prompt, injecting the design semantics content
           systemPrompt = gap_analysis_with_design_semantic_prompt(designSemanticFileContent);
           isCodebaseNeeded = true; 

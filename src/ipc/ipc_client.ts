@@ -70,6 +70,9 @@ import type {
   SupabaseBranch,
   SetSupabaseAppProjectParams,
   SelectNodeFolderResult,
+  SecurityFinding,
+  GuidedBuildFinding,
+  GuidedBuildReviewResult,
 } from "./ipc_types";
 import type { Template } from "../shared/templates";
 import type {
@@ -1217,10 +1220,23 @@ export class IpcClient {
     return this.ipcRenderer.invoke("get-latest-security-review", appId);
   }
 
-  public async getLatestAutoBuild(
+  public async getLatestGuidedBuild(
     appId: number,
-  ): Promise<SecurityReviewResult> {
-    return this.ipcRenderer.invoke("get-latest-auto-build", appId);
+  ): Promise<GuidedBuildReviewResult> {
+    return this.ipcRenderer.invoke("get-latest-guided-build", appId);
+  }
+
+  public async updateGuidedBuildFinding(
+    appId: number, 
+    originalTitle: string, 
+    updatedFinding: GuidedBuildFinding
+  ): Promise<boolean> {
+    return this.ipcRenderer.invoke(
+      "update-guided-build-finding",
+      appId,
+      originalTitle,
+      updatedFinding
+    );
   }
 
   public async importApp(params: ImportAppParams): Promise<ImportAppResult> {
